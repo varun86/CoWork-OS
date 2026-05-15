@@ -36,7 +36,7 @@
 </p>
 
 <p align="center">
-  <img src="screenshots/cowork-os-home-2026.webp" alt="CoWork OS home interface" width="700">
+  <img src="resources/branding/images/cowork-os-1.webp" alt="CoWork OS home interface" width="700">
 </p>
 
 ### Why CoWork OS?
@@ -158,6 +158,11 @@ See the [Development Guide](docs/development.md) for prerequisites and details.
 3. **Monitor execution** — Watch the real-time task timeline as the agent plans, executes, and produces artifacts. Parallel tool bursts are grouped into lane summaries, and shell commands run in a live terminal view where you can see output in real-time, stop execution, or provide input (e.g. `y`/`n`) directly.
 4. **Respond when needed** — Destructive operations require explicit approval (unless Autonomous mode is on), and plan-mode tasks can pause for structured multiple-choice input before continuing.
 
+<p align="center">
+  <img src="resources/branding/images/cowork-os-4.webp" alt="Running task monitor" width="700">
+  <br><em>Task execution stays visible with live progress, grouped work, and reviewable outputs.</em>
+</p>
+
 ## Features
 
 ### Agent Runtime
@@ -165,6 +170,11 @@ See the [Development Guide](docs/development.md) for prerequisites and details.
 Task-based execution with dynamic re-planning, five runtime modes (Chat, Execute, Plan, Analyze, Verified) plus orchestration toggles (Autonomous, Collaborative, Multi-LLM, Think With Me), `/multitask` lane fan-out, a shared turn kernel, metadata-driven tool scheduling, graph-backed delegation, typed worker roles, optional workflow-pipeline execution with per-phase model routing, agent teams with persistence, agent comparison, git worktree isolation, AI playbook, and performance reviews. [Learn more](docs/features.md#agent-capabilities)
 
 Skills now follow an additive runtime model: CoWork can proactively shortlist or apply a relevant skill, but the original task remains canonical. Skills add context and scoped execution modifiers instead of replacing the task prompt. [Learn more](docs/skills-runtime-model.md)
+
+<p align="center">
+  <img src="resources/branding/images/cowork-os-3.webp" alt="Agents Hub" width="700">
+  <br><em>Agents Hub collects reusable managed agents, templates, and starter prompts.</em>
+</p>
 
 ### Chronicle (Desktop Research Preview)
 
@@ -225,6 +235,11 @@ Long-running tasks now have clearer operator handoffs and stronger recovery defa
 
 Centralized orchestration and monitoring cockpit with a Kanban board, real-time activity feed, core automation profile visibility, and a `Core Harness` view for traces, failure clusters, evals, experiments, and learnings. [Learn more](docs/mission-control.md) | [Core Automation](docs/core-automation.md)
 
+<p align="center">
+  <img src="resources/branding/images/cowork-os-8.webp" alt="Mission Control task board" width="700">
+  <br><em>Mission Control shows task queues, lanes, status, and operational review in one board.</em>
+</p>
+
 ### Devices
 
 The Devices tab turns CoWork OS into a multi-machine control surface. Save and reconnect remote CoWork nodes, inspect device summaries (activity, apps, storage, alerts, resource signals), launch tasks against a selected machine, browse that machine's remote workspaces, and attach files directly from the remote filesystem before dispatching a task. [Learn more](docs/remote-access.md)
@@ -233,13 +248,42 @@ The Devices tab turns CoWork OS into a multi-machine control surface. Save and r
 
 Automations are now organized around a hard boundary: **Workflow Intelligence** is the always-on cognitive loop, while `Routines` are the main saved-automation product layered on top of lower-level execution surfaces. `Scheduled Tasks`, `Webhooks`, and `Event Triggers` still exist, but they now also serve as advanced or compiled backends for routines rather than competing first-class automation concepts. Task view can also turn the current task into a real scheduled task from the three-dot menu with `Add automation...`, preserving the source task title, ID, and `cowork://tasks/<taskId>` deeplink. The home dashboard, welcome-screen Next actions, and routines panel surface recent automation suggestions/runs so you can monitor background systems without hunting through tabs. [Learn more](docs/core-automation.md) | [Task Automations](docs/task-automations.md)
 
+<p align="center">
+  <img src="resources/branding/images/cowork-os-6.webp" alt="Automations dashboard" width="700">
+  <br><em>Automations separate scheduled work, triggered runs, and recurring background systems.</em>
+</p>
+
+### Everyday Agent
+
+Everyday Agent turns personal priorities into a reviewable operating plan: goals, live plan items, priority queues, enabled capabilities, and focused settings stay visible instead of hiding inside a generic chat thread. [Learn more](docs/everyday-agent.md)
+
+<p align="center">
+  <img src="resources/branding/images/cowork-os-7.webp" alt="Everyday Agent plan" width="700">
+  <br><em>Everyday Agent keeps active goals, plans, and priority queues visible.</em>
+</p>
+
+<p align="center">
+  <img src="resources/branding/images/cowork-os-13.webp" alt="Everyday Agent settings" width="700">
+  <br><em>Capability settings make each Everyday Agent lane explicit and adjustable.</em>
+</p>
+
 ### Zero-Human Company Ops
 
 CoWork OS can be configured as a founder-operated autonomous company shell: venture workspace kit context, a dedicated `Settings > Companies` control surface, company-linked operator agents, automation profiles, strategic planner issue generation, and Mission Control ops monitoring. Create the company in `Companies`, activate operator personas such as `Company Planner` and `Founder Office Operator`, then attach automation where needed and monitor the company loop from Mission Control. [Learn more](docs/zero-human-company.md) | [Core Automation](docs/core-automation.md)
 
+<p align="center">
+  <img src="resources/branding/images/cowork-os-2.webp" alt="Company operations dashboard" width="700">
+  <br><em>Company workspaces can track goals, operators, and autonomous company loops.</em>
+</p>
+
 ### Digital Twin Personas
 
 Role-specific AI twins that handle cognitive overhead as optional persona presets. Pick a template (Software Engineer, Engineering Manager, Product Manager, VP, Founder Office Operator, Company Planner, and more), customize it, and activate it as a role preset with recommended skills and prompt/personality defaults. Twins can be linked to a company for company-aware operations, but they no longer own heartbeat or Workflow Intelligence policy directly. [Learn more](docs/digital-twins.md)
+
+<p align="center">
+  <img src="resources/branding/images/cowork-os-14.webp" alt="Agent personas" width="700">
+  <br><em>Persona presets give managed agents role-specific defaults and tools.</em>
+</p>
 
 ### Live Canvas & Build Mode
 
@@ -248,6 +292,11 @@ Agent-driven visual workspace for interactive HTML/CSS/JS content, data visualiz
 ### Multichannel Gateway
 
 Unified AI gateway across 17 channels with security modes, rate limiting, ambient mode, scheduled tasks, channel/chat/thread specialization, and a shared message lifecycle for commands, active-task follow-ups, cancellations, progress delivery, skill slashes, and scheduled outputs. WhatsApp supports `/new`, `/new temp`, `/stop`, editable progress updates, and hidden temporary scratch workspaces; Slack supports multiple workspaces and channel specialization, Telegram supports group/topic specialization plus group-routing policies and allowlists, Discord can be limited to specific guilds and specialized per channel/thread, and Feishu/Lark plus WeCom are first-class channels. [Learn more](docs/channels.md) | [Per-channel guides](docs/channel-user-guides.md) | [User guide](docs/gateway-user-guide.md) | [Message lifecycle](docs/gateway-message-lifecycle.md)
+
+<p align="center">
+  <img src="resources/branding/images/cowork-os-12.webp" alt="Messaging channel setup" width="700">
+  <br><em>Channel settings specialize routing, security, and workspace behavior per messaging surface.</em>
+</p>
 
 ### Inbox Agent
 
@@ -264,6 +313,11 @@ Local-first inbox workspace that turns email into an action queue while preservi
 - **Gmail auto-forwarding**: create forwarding automations from a Gmail thread with dry-run support, attachment filters, per-message dedupe, and thread-scoped execution
 - **Commitment tracking**: accept commitments into real follow-up tasks, mark already-handled threads done, or dismiss items
 - **Background sync**: load from the local database immediately and refresh in the background without blanking the inbox on restart
+
+<p align="center">
+  <img src="resources/branding/images/cowork-os-5.webp" alt="Inbox Agent workspace" width="700">
+  <br><em>Inbox Agent combines mailbox triage, thread evidence, drafts, and next actions.</em>
+</p>
 
 ### Infrastructure
 
@@ -288,6 +342,11 @@ Advanced web scraping powered by [Scrapling](https://github.com/D4Vinci/Scraplin
 - **Google Workspace**: one OAuth connection covers Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, and Chat. Existing users may need to reconnect when a release adds new required scopes.
 - **Developer Tools**: `glob`/`grep`/`edit_file`, Playwright browser automation, MCP client/host/registry
 
+<p align="center">
+  <img src="resources/branding/images/cowork-os-11.webp" alt="Connector catalog" width="700">
+  <br><em>Connector setup covers productivity, CRM, support, analytics, and payment tools.</em>
+</p>
+
 [Learn more](docs/features.md)
 
 ### Active Context Sidebar
@@ -298,9 +357,23 @@ Real-time overview of your active integrations, always visible in the right pane
 
 Dashboard with task metrics, cost/token tracking by model, prompt-cache read telemetry (`cachedTokens` and cache-read rate where available), activity heatmaps (day-of-week and hourly), top skills usage, per-pack analytics, persona-level success/retry/cost breakdowns, and task-result thumbs up/down quality signals with 7/14/30-day period selection. Access from **Settings** > **Usage Insights**. [Learn more](docs/features.md#usage-insights)
 
+### Health
+
+Health pulls personal signals into a private, action-oriented view for readiness, notes, and workflow state.
+
+<p align="center">
+  <img src="resources/branding/images/cowork-os-9.webp" alt="Health dashboard" width="700">
+  <br><em>Health keeps personal signals organized for review and action.</em>
+</p>
+
 ### LLM Providers
 
 34 provider options, with 13 built-in providers and 21 compatible/gateway providers. Use cloud APIs or run fully offline with Ollama, configure an ordered fallback chain for runtime failover, and get default-on prompt caching on supported Claude and GPT-style routes. Claude supports both direct API keys and Claude subscription tokens from `claude setup-token`, with live **Refresh Models** support in Settings. [Learn more](docs/providers.md)
+
+<p align="center">
+  <img src="resources/branding/images/cowork-os-10.webp" alt="AI model provider settings" width="700">
+  <br><em>Model settings centralize providers, fallback routing, authentication, and model choices.</em>
+</p>
 
 ### Plugin Platform & Customize
 
@@ -357,12 +430,6 @@ Persistent memory with privacy protection, FTS5 search, LLM compression, and a c
 The workspace kit separates workspace-wide files such as `AGENTS.md`, `USER.md`, `MEMORY.md`, `TOOLS.md`, `SOUL.md`, `IDENTITY.md`, `RULES.md`, `VIBES.md`, and `LORE.md` from project-scoped files such as `.cowork/projects/<projectId>/CONTEXT.md` and `.cowork/projects/<projectId>/ACCESS.md`. Special files get dedicated lifecycle handling: `BOOTSTRAP.md` is a one-time onboarding checklist tracked through `.cowork/workspace-state.json`, while `HEARTBEAT.md` is reserved for recurring Heartbeat v3 checklist work instead of general task context.
 
 Every tracked file follows a shared parser/linter model with freshness windows, secret detection, missing-file status, and revision snapshots stored under `.cowork/**/.history/`. Workspace kit health is surfaced in the app and can be checked locally with `npm run kit:lint` for human-readable output or JSON export. **Import your ChatGPT history** to eliminate the cold-start problem — CoWork OS knows you from day one. All imported data is stored locally and encrypted on your machine. **Structured memory observations** add inspectable local metadata, progressive recall tools, Memory Hub privacy controls, deterministic rebuild/backfill, and soft-delete suppression on top of archive memory. **Optional Supermemory integration** adds an external provider lane with `supermemory_profile`, `supermemory_search`, `supermemory_remember`, and `supermemory_forget`, plus optional prompt-time profile injection and background mirroring of non-private local memory captures. **Proactive session compaction** automatically generates comprehensive structured summaries when context reaches 90% capacity, and checkpoint capture preserves exact supporting spans so recall quality survives compaction. [Learn more](docs/features.md#persistent-memory-system) | [Structured Memory](docs/memory-observations.md) | [Supermemory](docs/supermemory.md) | [Context Compaction](docs/context-compaction.md)
-
-<p align="center">
-  <img src="screenshots/cowork-os-agent-personas-2026.webp" alt="Agent personas" width="700">
-  <br>
-  <em>Role-specific agent personas and managed workspace agents</em>
-</p>
 
 ## Architecture
 
@@ -424,58 +491,6 @@ See [Security Guide](docs/security-guide.md) and [Security Architecture](docs/se
 | **Packaged Server** | Linux x64 VPS | [VPS Guide](docs/vps-linux.md) |
 | **Self-Hosted** | GitHub release tarball / Docker / systemd | [Self-Hosting](docs/self-hosting.md) |
 | **Remote Access** | Tailscale / SSH | [Remote Access](docs/remote-access.md) |
-
-## Screenshots
-
-<p align="center">
-  <img src="screenshots/cowork-os-dashboard-2026.webp" alt="CoWork OS dashboard" width="700">
-  <br><em>Workspace dashboard for high-level goals, tasks, agents, and automations</em>
-</p>
-
-<p align="center">
-  <img src="screenshots/cowork-os-agents-hub-2026.webp" alt="Agents Hub" width="700">
-  <br><em>Agents Hub with reusable workspace agents and templates</em>
-</p>
-
-<p align="center">
-  <img src="screenshots/cowork-os-mission-control-2026.webp" alt="Mission Control task monitor" width="700">
-  <br><em>Mission Control for running tasks, queues, lanes, and operational review</em>
-</p>
-
-<p align="center">
-  <img src="screenshots/cowork-os-inbox-agent-2026.webp" alt="Inbox Agent" width="700">
-  <br><em>Inbox Agent with mailbox triage, thread evidence, and reply support</em>
-</p>
-
-<p align="center">
-  <img src="screenshots/cowork-os-automations-2026.webp" alt="Automations" width="700">
-  <br><em>Automations for scheduled, triggered, and recurring work</em>
-</p>
-
-<p align="center">
-  <img src="screenshots/cowork-os-everyday-agent-2026.webp" alt="Everyday Agent" width="700">
-  <br><em>Everyday Agent plans, goals, and priority queues</em>
-</p>
-
-<p align="center">
-  <img src="screenshots/cowork-os-health-2026.webp" alt="Health dashboard" width="700">
-  <br><em>Health dashboard for personal signals and workflow status</em>
-</p>
-
-<p align="center">
-  <img src="screenshots/cowork-os-ai-models-2026.webp" alt="AI model settings" width="700">
-  <br><em>AI model and provider configuration with fallback routing</em>
-</p>
-
-<p align="center">
-  <img src="screenshots/cowork-os-connectors-2026.webp" alt="Connectors catalog" width="700">
-  <br><em>Connector catalog for CRM, support, productivity, analytics, and payment integrations</em>
-</p>
-
-<p align="center">
-  <img src="screenshots/cowork-os-channels-2026.webp" alt="Messaging channels" width="700">
-  <br><em>Messaging channel setup for WhatsApp, Telegram, Discord, Slack, Teams, and more</em>
-</p>
 
 ## Roadmap
 
