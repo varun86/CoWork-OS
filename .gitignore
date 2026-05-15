@@ -98,6 +98,13 @@ tmp/
 temp/
 *.tmp
 
+# Python cache artifacts
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
 # Media files — user audio/voice recordings must never be committed
 *.ogg
 *.opus
@@ -114,7 +121,6 @@ temp/
 cowork-oss/
 docs/ios-companion-example.swift
 Mission_Control_Comparison_Recommendations.docx
-__pycache__/
 CoWork OS founder vault/
 AGENTS.md
 /Users/
