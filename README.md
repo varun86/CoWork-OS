@@ -36,7 +36,7 @@
 </p>
 
 <p align="center">
-  <img src="screenshots/cowork-os-home.png" alt="CoWork OS Interface" width="700">
+  <img src="screenshots/cowork-os-home-2026.webp" alt="CoWork OS home interface" width="700">
 </p>
 
 ### Why CoWork OS?
@@ -100,7 +100,7 @@ Stable workflow entry points for the newest high-impact capabilities.
 - **React/Next.js implementation guidance** — bundled `react-best-practices` skill for React workspace changes, Next.js feature work, reviews, refactors, data-fetching improvements, bundle-size checks, and rendering-performance fixes. [Learn more](docs/skills/react-best-practices.md)
 - **High-agency frontend design** — bundled `taste-skill` for stricter anti-slop frontend work with stronger layout variance, typography, motion, and implementation rules.
 
-See [Workflow Intelligence](docs/workflow-intelligence.md), [Dreaming](docs/dreaming.md), [Core Automation](docs/core-automation.md), [I Gave CoWork OS Workflow Intelligence, And Now It Learns From Reviewable Work | Full Guide](docs/continual-learning-in-cowork.md), [Features](docs/features.md), [Heartbeat v3](docs/heartbeat-v3.md), [Providers](docs/providers.md), and [Plugin Packs](docs/plugin-packs.md) for current runtime details.
+See [Everyday Agent](docs/everyday-agent.md), [Workflow Intelligence](docs/workflow-intelligence.md), [Dreaming](docs/dreaming.md), [Core Automation](docs/core-automation.md), [I Gave CoWork OS Workflow Intelligence, And Now It Learns From Reviewable Work | Full Guide](docs/continual-learning-in-cowork.md), [Features](docs/features.md), [Heartbeat v3](docs/heartbeat-v3.md), [Providers](docs/providers.md), and [Plugin Packs](docs/plugin-packs.md) for current runtime details.
 
 ### Latest Release
 
@@ -359,9 +359,9 @@ The workspace kit separates workspace-wide files such as `AGENTS.md`, `USER.md`,
 Every tracked file follows a shared parser/linter model with freshness windows, secret detection, missing-file status, and revision snapshots stored under `.cowork/**/.history/`. Workspace kit health is surfaced in the app and can be checked locally with `npm run kit:lint` for human-readable output or JSON export. **Import your ChatGPT history** to eliminate the cold-start problem — CoWork OS knows you from day one. All imported data is stored locally and encrypted on your machine. **Structured memory observations** add inspectable local metadata, progressive recall tools, Memory Hub privacy controls, deterministic rebuild/backfill, and soft-delete suppression on top of archive memory. **Optional Supermemory integration** adds an external provider lane with `supermemory_profile`, `supermemory_search`, `supermemory_remember`, and `supermemory_forget`, plus optional prompt-time profile injection and background mirroring of non-private local memory captures. **Proactive session compaction** automatically generates comprehensive structured summaries when context reaches 90% capacity, and checkpoint capture preserves exact supporting spans so recall quality survives compaction. [Learn more](docs/features.md#persistent-memory-system) | [Structured Memory](docs/memory-observations.md) | [Supermemory](docs/supermemory.md) | [Context Compaction](docs/context-compaction.md)
 
 <p align="center">
-  <img src="screenshots/cowork-os-agents.png" alt="Agent Personas" width="700">
+  <img src="screenshots/cowork-os-agent-personas-2026.webp" alt="Agent personas" width="700">
   <br>
-  <em>Role-specific agent personas and intent-first task startup</em>
+  <em>Role-specific agent personas and managed workspace agents</em>
 </p>
 
 ## Architecture
@@ -428,33 +428,53 @@ See [Security Guide](docs/security-guide.md) and [Security Architecture](docs/se
 ## Screenshots
 
 <p align="center">
-  <img src="screenshots/cowork-os-canvas.png" alt="Live Canvas" width="700">
-  <br><em>Live Canvas for visual, iterative build workflows</em>
+  <img src="screenshots/cowork-os-dashboard-2026.webp" alt="CoWork OS dashboard" width="700">
+  <br><em>Workspace dashboard for high-level goals, tasks, agents, and automations</em>
 </p>
 
 <p align="center">
-  <img src="screenshots/cowork-os-excel.png" alt="Spreadsheet Output" width="700">
-  <br><em>Structured spreadsheet outputs generated directly in chat</em>
+  <img src="screenshots/cowork-os-agents-hub-2026.webp" alt="Agents Hub" width="700">
+  <br><em>Agents Hub with reusable workspace agents and templates</em>
 </p>
 
 <p align="center">
-  <img src="screenshots/cowork-os-connectors.png" alt="Connector Setup" width="700">
-  <br><em>Enterprise connector setup with OAuth and credential management</em>
+  <img src="screenshots/cowork-os-mission-control-2026.webp" alt="Mission Control task monitor" width="700">
+  <br><em>Mission Control for running tasks, queues, lanes, and operational review</em>
 </p>
 
 <p align="center">
-  <img src="screenshots/cowork-os-usageinsights.png" alt="Usage Insights Dashboard" width="700">
-  <br><em>Usage Insights dashboard with performance, efficiency, and activity trends</em>
+  <img src="screenshots/cowork-os-inbox-agent-2026.webp" alt="Inbox Agent" width="700">
+  <br><em>Inbox Agent with mailbox triage, thread evidence, and reply support</em>
 </p>
 
 <p align="center">
-  <img src="screenshots/cowork-os-extensions.png" alt="Extensions Manager" width="700">
-  <br><em>Extensions manager for installed plugin packs and lifecycle controls</em>
+  <img src="screenshots/cowork-os-automations-2026.webp" alt="Automations" width="700">
+  <br><em>Automations for scheduled, triggered, and recurring work</em>
 </p>
 
 <p align="center">
-  <img src="screenshots/cowork-os-skillpacks.png" alt="Customize Skill Packs" width="700">
-  <br><em>Pack-level customization with per-skill toggles and suggested prompts</em>
+  <img src="screenshots/cowork-os-everyday-agent-2026.webp" alt="Everyday Agent" width="700">
+  <br><em>Everyday Agent plans, goals, and priority queues</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/cowork-os-health-2026.webp" alt="Health dashboard" width="700">
+  <br><em>Health dashboard for personal signals and workflow status</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/cowork-os-ai-models-2026.webp" alt="AI model settings" width="700">
+  <br><em>AI model and provider configuration with fallback routing</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/cowork-os-connectors-2026.webp" alt="Connectors catalog" width="700">
+  <br><em>Connector catalog for CRM, support, productivity, analytics, and payment integrations</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/cowork-os-channels-2026.webp" alt="Messaging channels" width="700">
+  <br><em>Messaging channel setup for WhatsApp, Telegram, Discord, Slack, Teams, and more</em>
 </p>
 
 ## Roadmap
