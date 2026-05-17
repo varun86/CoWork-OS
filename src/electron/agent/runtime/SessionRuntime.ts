@@ -52,6 +52,7 @@ import {
   type TurnKernelPolicy,
 } from "./turn-kernel";
 import type { ToolRegistry } from "../tools/registry";
+import { DurableContextService } from "../../memory/DurableContextService";
 
 interface WebEvidenceEntry {
   tool: "web_search" | "web_fetch";
@@ -967,7 +968,18 @@ export class SessionRuntime {
   }
 
   updateConversationHistory(messages: LLMMessage[]): void {
-    this.state.transcript.conversationHistory = this.deps.sanitizeConversationHistory(messages);
+    const sanitized = this.deps.sanitizeConversationHistory(messages);
+    this.state.transcript.conversationHistory = sanitized;
+    try {
+      DurableContextService.recordHistory({
+        workspaceId: this.deps.getWorkspace().id,
+        taskId: this.deps.getTask().id,
+        messages: sanitized,
+        source: "runtime_history",
+      });
+    } catch {
+      // Durable context is an experimental continuity layer; never block runtime turns.
+    }
   }
 
   appendConversationHistory(message: LLMMessage): void {
@@ -1063,6 +1075,7 @@ export class SessionRuntime {
       agentType: task.agentType ?? "main",
       workerRole: task.workerRole ?? null,
       allowUserInput: task.agentConfig?.allowUserInput !== false,
+      humanInputPolicy: task.agentConfig?.humanInputPolicy,
     };
   }
 
@@ -1072,6 +1085,7 @@ export class SessionRuntime {
     taskTitle: string;
     taskPrompt: string;
     lastUserMessage: string;
+    currentStepId: string | null;
     discoveredDeferredToolNames: string[];
   }): string {
     return JSON.stringify({
@@ -1080,6 +1094,7 @@ export class SessionRuntime {
       taskTitle: params.taskTitle,
       taskPrompt: params.taskPrompt,
       lastUserMessage: params.lastUserMessage,
+      currentStepId: params.currentStepId,
       discoveredDeferredToolNames: params.discoveredDeferredToolNames,
     });
   }
@@ -1109,6 +1124,7 @@ export class SessionRuntime {
       taskTitle: String(task.title || ""),
       taskPrompt: String(task.prompt || ""),
       lastUserMessage: String(this.state.transcript.lastUserMessage || ""),
+      currentStepId: this.state.loop.currentStepId,
       discoveredDeferredToolNames: Array.from(this.state.tooling.discoveredDeferredToolNames).sort(),
     });
     if (
@@ -1199,6 +1215,7 @@ export class SessionRuntime {
     messages: LLMMessage[];
     retryLabel: string;
     operation: string;
+    forceNoTools?: boolean;
   }): Promise<{ response: Any; availableTools: Any[] }> {
     return requestLLMResponseWithAdaptiveBudgetUtil({
       ...opts,
@@ -1380,6 +1397,14 @@ export class SessionRuntime {
             tag: "PINNED_COMPACTION_SUMMARY",
             content: summaryBlock,
           });
+          DurableContextService.recordCompactionSummary({
+            workspaceId: this.deps.getWorkspace().id,
+            taskId: this.deps.getTask().id,
+            removedMessages: proactiveResult.meta.removedMessages.messages,
+            summaryBlock,
+            contextLabel: opts.contextLabel,
+            proactive: true,
+          });
           await this.deps.flushCompactionSummaryToMemory({
             workspaceId: this.deps.getWorkspace().id,
             taskId: this.deps.getTask().id,
@@ -1436,6 +1461,14 @@ export class SessionRuntime {
           this.deps.upsertPinnedUserBlock(messages, {
             tag: "PINNED_COMPACTION_SUMMARY",
             content: summaryBlock,
+          });
+          DurableContextService.recordCompactionSummary({
+            workspaceId: this.deps.getWorkspace().id,
+            taskId: this.deps.getTask().id,
+            removedMessages: compaction.meta.removedMessages.messages,
+            summaryBlock,
+            contextLabel: opts.contextLabel,
+            proactive: false,
           });
           await this.deps.flushCompactionSummaryToMemory({
             workspaceId: this.deps.getWorkspace().id,
@@ -1516,12 +1549,22 @@ export class SessionRuntime {
         0.35,
       );
       let compactedMessages = proactive.messages;
+      let removedMessages = proactive.meta.removedMessages.messages;
       if (!proactive.meta.removedMessages.didRemove) {
         const fallback = this.deps.getContextManager().compactMessagesWithMeta(
           compactedMessages,
           opts.systemPromptTokens,
         );
         compactedMessages = fallback.messages;
+        removedMessages = fallback.meta.removedMessages.messages;
+      }
+      if (removedMessages.length > 0) {
+        DurableContextService.recordHistory({
+          workspaceId: this.deps.getWorkspace().id,
+          taskId: this.deps.getTask().id,
+          messages: removedMessages,
+          source: "context_capacity_recovery_source",
+        });
       }
 
       this.deps.pruneStaleToolErrors(compactedMessages);
@@ -1585,6 +1628,26 @@ export class SessionRuntime {
       const compacted = this.deps
         .getContextManager()
         .compactMessagesWithMeta(this.state.transcript.conversationHistory, systemPromptTokens);
+      if (
+        compacted.meta.removedMessages.didRemove &&
+        compacted.meta.removedMessages.messages.length > 0
+      ) {
+        const summaryBlock = await this.deps.buildCompactionSummaryBlock({
+          removedMessages: compacted.meta.removedMessages.messages,
+          maxOutputTokens: 1200,
+          contextLabel: "continuation compaction",
+        });
+        if (summaryBlock) {
+          DurableContextService.recordCompactionSummary({
+            workspaceId: this.deps.getWorkspace().id,
+            taskId: this.deps.getTask().id,
+            removedMessages: compacted.meta.removedMessages.messages,
+            summaryBlock,
+            contextLabel: "continuation compaction",
+            proactive: false,
+          });
+        }
+      }
       this.updateConversationHistory(compacted.messages);
       const tokensAfter = estimateTotalTokens(this.state.transcript.conversationHistory);
       this.state.loop.compactionCount += 1;
