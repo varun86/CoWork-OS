@@ -88,6 +88,8 @@ const BASE_CONTRACTS = {
     belongsHere: [
       "tone",
       "collaboration style",
+      "pushback contract",
+      "accountability loop",
       "execution philosophy",
       "default communication style",
     ],
@@ -317,7 +319,7 @@ const BASE_CONTRACTS = {
 
 export const WORKSPACE_KIT_CONTRACTS: Record<string, KitContract> = BASE_CONTRACTS;
 
-export const ROLE_KIT_FILES = ["IDENTITY.md", "RULES.md", "SOUL.md", "VIBES.md"] as const;
+export const ROLE_KIT_FILES = ["IDENTITY.md", "RULES.md", "SOUL.md", "MEMORY.md", "VIBES.md"] as const;
 
 export const WORKSPACE_PROMPT_ORDER = [
   "IDENTITY.md",
