@@ -17,6 +17,12 @@ const DEFAULT_SETTINGS: MemoryFeaturesSettings = {
   promptStackV2Enabled: false,
   layeredMemoryEnabled: false,
   transcriptStoreEnabled: false,
+  durableContextEnabled: false,
+  durableContextMode: "off",
+  durableContextThreshold: 0.75,
+  durableContextFreshTailCount: 64,
+  durableContextLargePayloadThreshold: 25000,
+  durableContextSummaryModel: "",
   backgroundConsolidationEnabled: false,
   queryOrchestratorEnabled: false,
   sessionLineageEnabled: false,
@@ -32,6 +38,65 @@ const DEFAULT_SETTINGS: MemoryFeaturesSettings = {
 
 function isEnabled(value: boolean | undefined): boolean {
   return value === true;
+}
+
+function normalizeDurableContextMode(
+  value: MemoryFeaturesSettings["durableContextMode"],
+): "off" | "experimental" | "on" {
+  return value === "experimental" || value === "on" ? value : "off";
+}
+
+function normalizePositiveNumber(value: unknown, fallback: number): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function normalizeSettings(settings: MemoryFeaturesSettings): MemoryFeaturesSettings {
+  const durableContextMode = normalizeDurableContextMode(settings.durableContextMode);
+  const durableContextEnabled =
+    isEnabled(settings.durableContextEnabled) || durableContextMode !== "off";
+  const effectiveDurableMode =
+    durableContextEnabled && durableContextMode === "off" ? "experimental" : durableContextMode;
+
+  return {
+    contextPackInjectionEnabled: !!settings.contextPackInjectionEnabled,
+    heartbeatMaintenanceEnabled: !!settings.heartbeatMaintenanceEnabled,
+    checkpointCaptureEnabled:
+      durableContextEnabled || settings.checkpointCaptureEnabled !== false,
+    verbatimRecallEnabled: settings.verbatimRecallEnabled !== false,
+    wakeUpLayersEnabled: settings.wakeUpLayersEnabled !== false,
+    temporalKnowledgeEnabled: settings.temporalKnowledgeEnabled !== false,
+    promptStackV2Enabled: isEnabled(settings.promptStackV2Enabled),
+    layeredMemoryEnabled: isEnabled(settings.layeredMemoryEnabled),
+    transcriptStoreEnabled: durableContextEnabled || isEnabled(settings.transcriptStoreEnabled),
+    durableContextEnabled,
+    durableContextMode: effectiveDurableMode,
+    durableContextThreshold: Math.min(
+      0.95,
+      Math.max(0.25, normalizePositiveNumber(settings.durableContextThreshold, 0.75)),
+    ),
+    durableContextFreshTailCount: Math.floor(
+      normalizePositiveNumber(settings.durableContextFreshTailCount, 64),
+    ),
+    durableContextLargePayloadThreshold: Math.floor(
+      normalizePositiveNumber(settings.durableContextLargePayloadThreshold, 25000),
+    ),
+    durableContextSummaryModel:
+      typeof settings.durableContextSummaryModel === "string"
+        ? settings.durableContextSummaryModel.trim()
+        : "",
+    backgroundConsolidationEnabled: isEnabled(settings.backgroundConsolidationEnabled),
+    queryOrchestratorEnabled: isEnabled(settings.queryOrchestratorEnabled),
+    sessionLineageEnabled: isEnabled(settings.sessionLineageEnabled),
+    curatedMemoryEnabled: settings.curatedMemoryEnabled !== false,
+    sessionRecallEnabled: settings.sessionRecallEnabled !== false,
+    topicMemoryEnabled: settings.topicMemoryEnabled !== false,
+    defaultArchiveInjectionEnabled: isEnabled(settings.defaultArchiveInjectionEnabled),
+    autoPromoteToCuratedMemoryEnabled: isEnabled(settings.autoPromoteToCuratedMemoryEnabled),
+    structuredObservationsEnabled: settings.structuredObservationsEnabled !== false,
+    progressiveRecallToolsEnabled: settings.progressiveRecallToolsEnabled !== false,
+    memoryInspectorEnabled: settings.memoryInspectorEnabled !== false,
+  };
 }
 
 export class MemoryFeaturesManager {
@@ -61,29 +126,8 @@ export class MemoryFeaturesManager {
       console.error("[MemoryFeaturesManager] Failed to load settings:", error);
     }
 
-    // Normalize to booleans (defensive against corrupted values).
-    settings = {
-      contextPackInjectionEnabled: !!settings.contextPackInjectionEnabled,
-      heartbeatMaintenanceEnabled: !!settings.heartbeatMaintenanceEnabled,
-      checkpointCaptureEnabled: settings.checkpointCaptureEnabled !== false,
-      verbatimRecallEnabled: settings.verbatimRecallEnabled !== false,
-      wakeUpLayersEnabled: settings.wakeUpLayersEnabled !== false,
-      temporalKnowledgeEnabled: settings.temporalKnowledgeEnabled !== false,
-      promptStackV2Enabled: isEnabled(settings.promptStackV2Enabled),
-      layeredMemoryEnabled: isEnabled(settings.layeredMemoryEnabled),
-      transcriptStoreEnabled: isEnabled(settings.transcriptStoreEnabled),
-      backgroundConsolidationEnabled: isEnabled(settings.backgroundConsolidationEnabled),
-      queryOrchestratorEnabled: isEnabled(settings.queryOrchestratorEnabled),
-      sessionLineageEnabled: isEnabled(settings.sessionLineageEnabled),
-      curatedMemoryEnabled: settings.curatedMemoryEnabled !== false,
-      sessionRecallEnabled: settings.sessionRecallEnabled !== false,
-      topicMemoryEnabled: settings.topicMemoryEnabled !== false,
-      defaultArchiveInjectionEnabled: isEnabled(settings.defaultArchiveInjectionEnabled),
-      autoPromoteToCuratedMemoryEnabled: isEnabled(settings.autoPromoteToCuratedMemoryEnabled),
-      structuredObservationsEnabled: settings.structuredObservationsEnabled !== false,
-      progressiveRecallToolsEnabled: settings.progressiveRecallToolsEnabled !== false,
-      memoryInspectorEnabled: settings.memoryInspectorEnabled !== false,
-    };
+    // Normalize defensively against corrupted stored values.
+    settings = normalizeSettings(settings);
 
     this.cachedSettings = settings;
     return settings;
@@ -94,28 +138,10 @@ export class MemoryFeaturesManager {
       throw new Error("SecureSettingsRepository not initialized");
     }
 
-    const normalized: MemoryFeaturesSettings = {
-      contextPackInjectionEnabled: !!settings.contextPackInjectionEnabled,
-      heartbeatMaintenanceEnabled: !!settings.heartbeatMaintenanceEnabled,
-      checkpointCaptureEnabled: settings.checkpointCaptureEnabled !== false,
-      verbatimRecallEnabled: settings.verbatimRecallEnabled !== false,
-      wakeUpLayersEnabled: settings.wakeUpLayersEnabled !== false,
-      temporalKnowledgeEnabled: settings.temporalKnowledgeEnabled !== false,
-      promptStackV2Enabled: isEnabled(settings.promptStackV2Enabled),
-      layeredMemoryEnabled: isEnabled(settings.layeredMemoryEnabled),
-      transcriptStoreEnabled: isEnabled(settings.transcriptStoreEnabled),
-      backgroundConsolidationEnabled: isEnabled(settings.backgroundConsolidationEnabled),
-      queryOrchestratorEnabled: isEnabled(settings.queryOrchestratorEnabled),
-      sessionLineageEnabled: isEnabled(settings.sessionLineageEnabled),
-      curatedMemoryEnabled: settings.curatedMemoryEnabled !== false,
-      sessionRecallEnabled: settings.sessionRecallEnabled !== false,
-      topicMemoryEnabled: settings.topicMemoryEnabled !== false,
-      defaultArchiveInjectionEnabled: isEnabled(settings.defaultArchiveInjectionEnabled),
-      autoPromoteToCuratedMemoryEnabled: isEnabled(settings.autoPromoteToCuratedMemoryEnabled),
-      structuredObservationsEnabled: settings.structuredObservationsEnabled !== false,
-      progressiveRecallToolsEnabled: settings.progressiveRecallToolsEnabled !== false,
-      memoryInspectorEnabled: settings.memoryInspectorEnabled !== false,
-    };
+    const normalized: MemoryFeaturesSettings = normalizeSettings({
+      ...DEFAULT_SETTINGS,
+      ...settings,
+    });
 
     const repository = SecureSettingsRepository.getInstance();
     repository.save("memory", normalized);
