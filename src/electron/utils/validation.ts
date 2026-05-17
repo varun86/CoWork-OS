@@ -32,6 +32,7 @@ const MAX_TITLE_LENGTH = 500;
 const MAX_PROMPT_LENGTH = 500000; // ~125K tokens; fits within 200K-token model context
 const MAX_IMAGES_PER_MESSAGE = 5;
 const MAX_TOTAL_TASK_IMAGE_BYTES = 125 * 1024 * 1024;
+const MAX_OAUTH_TOKEN_LENGTH = 16 * 1024;
 const LOOM_MAILBOX_FOLDER_ERROR =
   "LOOM mailbox folder contains invalid characters";
 
@@ -176,6 +177,9 @@ export const AgentConfigSchema = z
     retainMemory: z.boolean().optional(),
     bypassQueue: z.boolean().optional(),
     allowUserInput: z.boolean().optional(),
+    humanInputPolicy: z
+      .enum(["none", "hard_blockers", "structured_plan", "legacy_interactive"])
+      .optional(),
     chronicleMode: z.enum(["inherit", "enabled", "disabled"]).optional(),
     shellAccess: z.boolean().optional(),
     requireWorktree: z.boolean().optional(),
@@ -669,9 +673,11 @@ export const OpenAISettingsSchema = z
     reasoningEffort: z.enum(["low", "medium", "high", "xhigh"]).optional(),
     textVerbosity: z.enum(["low", "medium", "high"]).optional(),
     // OAuth tokens (alternative to API key)
-    accessToken: z.string().max(2000).optional(),
-    refreshToken: z.string().max(2000).optional(),
+    accessToken: z.string().max(MAX_OAUTH_TOKEN_LENGTH).optional(),
+    refreshToken: z.string().max(MAX_OAUTH_TOKEN_LENGTH).optional(),
     tokenExpiresAt: z.number().optional(),
+    accountId: z.string().max(500).optional(),
+    email: z.string().max(500).optional(),
     authMethod: z.enum(["api_key", "oauth"]).optional(),
     ...ProviderRoutingSettingsSchema,
   })
@@ -712,6 +718,12 @@ export const GroqSettingsSchema = z
 export const XAISettingsSchema = z
   .object({
     apiKey: z.string().max(500).optional(),
+    accessToken: z.string().max(4000).optional(),
+    refreshToken: z.string().max(4000).optional(),
+    tokenExpiresAt: z.number().optional(),
+    tokenEndpoint: z.string().max(500).optional(),
+    idToken: z.string().max(4000).optional(),
+    authMethod: z.enum(["api_key", "oauth"]).optional(),
     model: z.string().max(200).optional(),
     baseUrl: z.string().max(500).optional(),
     ...ProviderRoutingSettingsSchema,
