@@ -44,6 +44,7 @@ import { CanvasTools } from "./canvas-tools";
 import { VisualTools } from "./visual-tools";
 import { MentionTools } from "./mention-tools";
 import { XTools } from "./x-tools";
+import { XSearchTools } from "./x-search-tools";
 import { NotionTools } from "./notion-tools";
 import { BoxTools } from "./box-tools";
 import { OneDriveTools } from "./onedrive-tools";
@@ -184,7 +185,7 @@ function guessExtFromMime(mimeType?: string): string {
 }
 
 const MCP_PAYMENT_TOOL_NAME = "x402_fetch";
-const NETWORK_READ_TOOL_NAMES = new Set(["web_search", "web_fetch"]);
+const NETWORK_READ_TOOL_NAMES = new Set(["web_search", "web_fetch", "x_search"]);
 const MCP_PAYMENT_AMOUNT_PATHS = [
   ["amount"],
   ["maxAmount"],
@@ -499,6 +500,7 @@ export class ToolRegistry {
   private visualTools: VisualTools;
   private mentionTools: MentionTools;
   private xTools: XTools;
+  private xSearchTools: XSearchTools;
   private notionTools: NotionTools;
   private boxTools: BoxTools;
   private oneDriveTools: OneDriveTools;
@@ -573,6 +575,7 @@ export class ToolRegistry {
     this.visualTools = new VisualTools(workspace, daemon, taskId);
     this.mentionTools = new MentionTools(workspace.id, taskId, daemon);
     this.xTools = new XTools(workspace, daemon, taskId);
+    this.xSearchTools = new XSearchTools(workspace, daemon, taskId);
     this.notionTools = new NotionTools(workspace, daemon, taskId);
     this.boxTools = new BoxTools(workspace, daemon, taskId);
     this.oneDriveTools = new OneDriveTools(workspace, daemon, taskId);
@@ -648,6 +651,7 @@ export class ToolRegistry {
     const mcpSettings = MCPSettingsManager.loadSettings();
     const integrationState = {
       x: XTools.isEnabled(),
+      xSearch: XSearchTools.hasCredentials(),
       notion: NotionTools.isEnabled(),
       box: BoxTools.isEnabled(),
       oneDrive: OneDriveTools.isEnabled(),
@@ -995,6 +999,7 @@ export class ToolRegistry {
     this.canvasTools.setWorkspace(workspace);
     this.visualTools.setWorkspace(workspace);
     this.xTools.setWorkspace(workspace);
+    this.xSearchTools.setWorkspace(workspace);
     this.notionTools.setWorkspace(workspace);
     this.boxTools.setWorkspace(workspace);
     this.oneDriveTools.setWorkspace(workspace);
@@ -1122,6 +1127,12 @@ export class ToolRegistry {
 
     // web_search is always available (DuckDuckGo provides free fallback)
     allTools.push(...this.getSearchToolDefinitions());
+
+    // x_search is opt-in through built-in tool settings and only appears when
+    // xAI OAuth or API-key credentials are configured.
+    if (XSearchTools.hasCredentials()) {
+      allTools.push(...this.getXSearchToolDefinitions());
+    }
 
     // Only add X/Twitter tool if integration is enabled
     if (XTools.isEnabled()) {
@@ -1786,6 +1797,25 @@ export class ToolRegistry {
       const result = await this.searchTools.webSearch(request.input);
       if (this.citationTracker && result && typeof result === "object") {
         this.citationTracker.addFromSearch((result as Any).results || []);
+      }
+      return result;
+    }, readParallelSchedulerSpec);
+    register("x_search", async ({ request }) => {
+      const result = await this.xSearchTools.search(request.input);
+      if (this.citationTracker && result && typeof result === "object") {
+        const inline = Array.isArray((result as Any).inline_citations)
+          ? (result as Any).inline_citations
+          : [];
+        const topLevel = Array.isArray((result as Any).citations)
+          ? (result as Any).citations
+          : [];
+        this.citationTracker.addFromSearch(
+          [...topLevel, ...inline].map((citation: Any) => ({
+            title: citation?.title,
+            url: citation?.url,
+            snippet: (result as Any).answer,
+          })),
+        );
       }
       return result;
     }, readParallelSchedulerSpec);
@@ -3027,7 +3057,7 @@ Browser Automation (use only when interaction is needed):
 
 Web Search (for finding URLs, not reading them):
 - web_search: Search the web for information${SearchProviderFactory.isAnyProviderConfigured() ? " (web, news, images)" : " (web)"}
-  Use to FIND relevant pages. To READ a specific URL, use web_fetch instead.`;
+  Use to FIND relevant pages. To READ a specific URL, use web_fetch instead.${XSearchTools.hasCredentials() ? "\n- x_search: Search X/Twitter posts with xAI's built-in X Search. Use for X-native claims, reactions, posts, profiles, and threads." : ""}`;
 
     // Add shell if permitted
     if (this.workspace.permissions.shell) {
@@ -3442,6 +3472,25 @@ ${skillDescriptions}`;
       const result = await this.searchTools.webSearch(input);
       if (this.citationTracker && result && typeof result === "object") {
         this.citationTracker.addFromSearch((result as Any).results || []);
+      }
+      return result;
+    }
+    if (name === "x_search") {
+      const result = await this.xSearchTools.search(input);
+      if (this.citationTracker && result && typeof result === "object") {
+        const inline = Array.isArray((result as Any).inline_citations)
+          ? (result as Any).inline_citations
+          : [];
+        const topLevel = Array.isArray((result as Any).citations)
+          ? (result as Any).citations
+          : [];
+        this.citationTracker.addFromSearch(
+          [...topLevel, ...inline].map((citation: Any) => ({
+            title: citation?.title,
+            url: citation?.url,
+            snippet: (result as Any).answer,
+          })),
+        );
       }
       return result;
     }
@@ -6414,6 +6463,57 @@ ${skillDescriptions}`;
             region: {
               type: "string",
               description: 'Region code for localized results (e.g., "us", "uk", "de")',
+            },
+          },
+          required: ["query"],
+        },
+      },
+    ];
+  }
+
+  /**
+   * Define xAI X Search tool
+   */
+  private getXSearchToolDefinitions(): LLMTool[] {
+    return [
+      {
+        name: "x_search",
+        description:
+          "Search X (Twitter) posts, profiles, and threads using xAI's built-in X Search tool. " +
+          "Use this for current discussion, reactions, or claims on X rather than general web pages. " +
+          "Available when xAI credentials are configured through Grok OAuth or an xAI API key.",
+        input_schema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "What to look up on X.",
+            },
+            allowed_x_handles: {
+              type: "array",
+              items: { type: "string" },
+              description: "Optional list of X handles to include exclusively (max 10).",
+            },
+            excluded_x_handles: {
+              type: "array",
+              items: { type: "string" },
+              description: "Optional list of X handles to exclude (max 10).",
+            },
+            from_date: {
+              type: "string",
+              description: "Optional start date in YYYY-MM-DD format.",
+            },
+            to_date: {
+              type: "string",
+              description: "Optional end date in YYYY-MM-DD format.",
+            },
+            enable_image_understanding: {
+              type: "boolean",
+              description: "Whether xAI should analyze images attached to matching X posts.",
+            },
+            enable_video_understanding: {
+              type: "boolean",
+              description: "Whether xAI should analyze videos attached to matching X posts.",
             },
           },
           required: ["query"],
