@@ -154,6 +154,35 @@ describe("role-persona", () => {
     expect(prompt).toContain("Mode: crunch");
   });
 
+  it("includes role-specific MEMORY.md between SOUL.md and VIBES.md", () => {
+    writeFile(
+      path.join(tmpDir, ".cowork", "agents", "qa-analyst", "SOUL.md"),
+      "# Soul\n\nBe thorough and precise",
+    );
+    writeFile(
+      path.join(tmpDir, ".cowork", "agents", "qa-analyst", "MEMORY.md"),
+      "# Memory\n\n- Regression test style: use focused fixtures",
+    );
+    writeFile(
+      path.join(tmpDir, ".cowork", "agents", "qa-analyst", "VIBES.md"),
+      "# Vibes\n\n- Mode: deep-focus",
+    );
+
+    const prompt = buildRolePersonaPrompt(
+      {
+        name: "qa-analyst",
+      },
+      tmpDir,
+    );
+
+    const soulIdx = prompt.indexOf("Workspace Persona");
+    const memoryIdx = prompt.indexOf("Long-Term Memory");
+    const vibesIdx = prompt.indexOf("Current Operating Mode");
+    expect(memoryIdx).toBeGreaterThan(soulIdx);
+    expect(memoryIdx).toBeLessThan(vibesIdx);
+    expect(prompt).toContain("Regression test style");
+  });
+
   it("loads SOUL.md before VIBES.md in role profile output", () => {
     writeFile(
       path.join(tmpDir, ".cowork", "agents", "qa-analyst", "VIBES.md"),
