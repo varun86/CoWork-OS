@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { TaskExecutor } from "../executor";
+import { SessionRuntime } from "../runtime/SessionRuntime";
 
 function makeExecutor(): Any {
   const executor = Object.create(TaskExecutor.prototype) as Any;
-  executor.workspace = { path: "/tmp" };
+  executor.task = { id: "task-1" };
+  executor.workspace = { id: "workspace-1", path: "/tmp" };
   executor.contextManager = {
     proactiveCompactWithMeta: vi.fn((messages: Any[]) => ({
       messages: messages.slice(1),
@@ -29,6 +31,20 @@ function makeExecutor(): Any {
   executor.pruneStaleToolErrors = vi.fn();
   executor.consolidateConsecutiveUserMessages = vi.fn();
   executor.emitEvent = vi.fn();
+  executor.getSessionRuntime = vi.fn(
+    () =>
+      new SessionRuntime(
+        {
+          emitEvent: executor.emitEvent,
+          getContextManager: () => executor.contextManager,
+          getTask: () => executor.task,
+          getWorkspace: () => executor.workspace,
+          pruneStaleToolErrors: executor.pruneStaleToolErrors,
+          consolidateConsecutiveUserMessages: executor.consolidateConsecutiveUserMessages,
+        } as Any,
+        {} as Any,
+      ),
+  );
   return executor;
 }
 
