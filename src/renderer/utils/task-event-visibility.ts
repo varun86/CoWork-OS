@@ -88,6 +88,39 @@ function asObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function getPayloadText(payload: Record<string, unknown>, key: string): string {
+  const value = payload[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+export function isLlmRequestCancelledEvent(event: TaskEvent): boolean {
+  const payload = asObject(event.payload);
+  const message = [
+    event.type === "timeline_error" ? getTimelineErrorText(event) : "",
+    getPayloadText(payload, "message"),
+    getPayloadText(payload, "error"),
+    getPayloadText(payload, "reason"),
+    getPayloadText(payload, "details"),
+  ]
+    .filter(Boolean)
+    .join(" ");
+  if (!/\brequest\s+cancell?ed\b/i.test(message)) return false;
+
+  const effectiveType = getEffectiveTaskEventType(event);
+  const legacyType =
+    typeof event.legacyType === "string"
+      ? event.legacyType
+      : typeof payload.legacyType === "string"
+        ? payload.legacyType
+        : "";
+
+  return (
+    effectiveType === "llm_error" ||
+    legacyType === "llm_error" ||
+    /\bllm\s+api\s+error\b/i.test(message)
+  );
+}
+
 function getTimelineGroupPayload(event: TaskEvent): Record<string, unknown> {
   return asObject(event.payload);
 }
@@ -354,7 +387,13 @@ export function filterVerboseTimelineNoise(events: TaskEvent[]): TaskEvent[] {
   const out: TaskEvent[] = [];
   const seenExactIds = new Set<string>();
   const lastSeenByKey = new Map<string, number>();
+  const cancelledTaskIds = new Set(
+    events
+      .filter((event) => getEffectiveTaskEventType(event) === "task_cancelled")
+      .map((event) => event.taskId),
+  );
   for (const event of events) {
+    if (cancelledTaskIds.has(event.taskId) && isLlmRequestCancelledEvent(event)) continue;
     if (isLowValueVerboseLifecycleEvent(event)) continue;
     if (getEffectiveTaskEventType(event) === "progress_update") continue;
     const exactId =
@@ -387,6 +426,7 @@ export function shouldShowTaskEventInSummaryMode(
   event: TaskEvent,
   taskStatus?: TaskStatus,
 ): boolean {
+  if (taskStatus === "cancelled" && isLlmRequestCancelledEvent(event)) return false;
   if (!isImportantTaskEvent(event)) return false;
   if (isToolBatchTimelineGroupEvent(event)) return false;
   if (isToolBatchLaneEvent(event)) return false;
