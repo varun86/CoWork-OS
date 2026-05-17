@@ -1,5 +1,10 @@
 # Getting Started with CoWork OS
 
+<p align="center">
+  <img src="../resources/branding/images/cowork-os-1.webp" alt="CoWork OS home screen" width="700">
+  <br><em>The home screen is the fastest way to start tasks, reopen recent work, and launch common workflows.</em>
+</p>
+
 ## Quick Start
 
 ### Step 1: Install Dependencies
@@ -21,23 +26,43 @@ This will:
 2. Launch Electron with hot reload enabled
 3. Open DevTools automatically
 
-### Step 3: Configure Your LLM Provider
+### Step 3: Choose How CoWork Runs AI
 
-1. Click the **Settings** icon (gear) in the sidebar
-2. Choose your LLM provider:
+On first launch, choose the easiest working model route for your machine:
+
+1. **Sign in with ChatGPT** if you already use a ChatGPT subscription. This is the simplest non-technical path because it uses browser sign-in instead of an API key.
+2. **Use local Ollama** if CoWork detects a model already running on your computer. This keeps model calls local and private.
+3. **Use an API key** for Claude, OpenAI API, Gemini, OpenRouter, Groq, xAI, DeepSeek, Kimi, NanoGPT, Bedrock, or other compatible providers. The provider picker marks OpenRouter, Gemini, and Groq with **Free** when a free usage path is available.
+4. **Explore without AI** if you only want to look around. AI tasks stay gated until one route is connected and tested.
+
+The onboarding flow keeps your answers in the renderer while you are moving through setup. CoWork writes the profile, provider choice, memory preference, and related settings only when you confirm the final recap. The recap is a fixed review frame with a scrollable body, so long work-context notes do not push the final action off screen.
+
+If you use the API-key path, open **Settings > LLM** and choose a provider:
+
    - **Claude** - Claude API key or Claude subscription token
-   - **Google Gemini** - Gemini models (requires API key from [aistudio.google.com](https://aistudio.google.com/apikey))
-   - **OpenRouter** - Multiple models, including the Pareto Code coding router (requires API key from [openrouter.ai](https://openrouter.ai/keys))
-   - **OpenAI** - GPT-4o, o1 models (requires API key from [platform.openai.com](https://platform.openai.com/api-keys))
+   - **Google Gemini** - Gemini models through Google AI Studio; free usage is available subject to Google's current limits (API key from [aistudio.google.com](https://aistudio.google.com/apikey))
+   - **OpenRouter** - Multiple models, including free model options and the Pareto Code coding router (API key from [openrouter.ai](https://openrouter.ai/keys))
+   - **OpenAI API** - OpenAI API models (requires API key from [platform.openai.com](https://platform.openai.com/api-keys))
+   - **ChatGPT Subscription** - browser sign-in with your ChatGPT account
+   - **Groq** - low-latency hosted models with free usage available subject to Groq's current limits
+   - **Grok OAuth** - Grok 4.3 with your active SuperGrok subscription, using browser sign-in
+   - **xAI API Key** - Grok models billed through your xAI API account
    - **AWS Bedrock** - Enterprise AWS (requires AWS credentials)
    - **Ollama** - Local models (free, requires [Ollama](https://ollama.ai) installed)
+
 3. If you choose **Claude**, pick one of these tabs:
    - **Claude API**: paste an API key from [console.anthropic.com](https://console.anthropic.com/)
    - **Claude Subscription**: install the provider's terminal app, run its token setup flow, and paste the generated `sk-ant-oat...` token
-4. Click **Refresh Models** to load the live models available to your credential, then choose a model
+4. If you choose **Grok OAuth**, click **Sign in with Grok**, complete the xAI browser flow, then keep `grok-4.3` or choose another listed Grok model. No `XAI_API_KEY` is required for this path.
+5. Click **Refresh Models** to load the live models available to your credential, then choose a model
    - For OpenRouter coding work, choose `openrouter/pareto-code` or `openrouter/pareto-code:nitro`. The optional Pareto score is a decimal from `0` to `1`, not a percentage.
-5. Click **Test Connection** to verify
-6. Save settings
+6. Click **Test Connection** to verify
+7. Save settings
+
+<p align="center">
+  <img src="../resources/branding/images/cowork-os-10.webp" alt="AI model provider settings" width="700">
+  <br><em>Settings centralizes provider credentials, fallback routing, and model selection.</em>
+</p>
 
 ### Optional: Configure Fallback Chains
 
@@ -61,9 +86,10 @@ Before you start relying on long-term context, open **Settings > Memory Hub** an
 - **Workspace Kit** initializes the local `.cowork/` context files used for durable prompt injection and project guidance.
 - **Memory settings** control local capture, privacy mode, retention, preview of the `L0/L1` memory payload, and the Memory Inspector for structured archive observations.
 - **Memory Inspector** lets you search observation metadata, inspect details and timelines, edit titles/narratives, promote useful entries to curated memory, mark entries private, suppress prompt recall, redact content, soft-delete entries, and rebuild deterministic metadata when needed.
+- **Durable Runtime Context** is optional. Enable it if you want long active tasks to retain sanitized task messages and source-linked compaction summaries that the agent can recover with `context_grep` and `context_describe`. It stays task-scoped by default and is erased by **Clear memory** for the workspace.
 - **Supermemory** is optional. If you want an external memory provider, enable it here, paste your API key, keep the default `cowork:{workspaceId}` container template unless you need something else, save, and click **Test Connection**.
 
-Supermemory does not replace CoWork's local memory system. It adds an external profile/search layer, explicit `supermemory_*` tools, optional prompt-time profile injection, and optional mirroring of non-private local memory captures. Local structured observations remain authoritative for privacy controls; private, redacted, and suppressed entries stay local. Dreaming also stays local and review-first by proposing memory curation candidates instead of sending memory maintenance to an external provider. See [Structured Memory Observations](memory-observations.md), [Dreaming](dreaming.md), and [Supermemory Integration](supermemory.md).
+Supermemory does not replace CoWork's local memory system. It adds an external profile/search layer, explicit `supermemory_*` tools, optional prompt-time profile injection, and optional mirroring of non-private local memory captures. Local structured observations remain authoritative for privacy controls; private, redacted, and suppressed entries stay local. Dreaming also stays local and review-first by proposing memory curation candidates instead of sending memory maintenance to an external provider. See [Structured Memory Observations](memory-observations.md), [Durable Runtime Context](durable-runtime-context.md), [Dreaming](dreaming.md), and [Supermemory Integration](supermemory.md).
 
 ## Troubleshooting
 
@@ -76,10 +102,10 @@ Supermemory does not replace CoWork's local memory system. It adds an external p
 
 ### Step 4: Create Your First Task
 
-1. **Select a Workspace**
-   - Click "Select Folder"
-   - Choose a folder you want CoWork OS to work in
-   - This will be your workspace (e.g., `~/Documents/test-workspace`)
+1. **Start in the private starter workspace**
+   - CoWork creates a private starter workspace automatically, so you can run a safe first task without choosing a real folder.
+   - Click **Choose folder** when you want CoWork OS to work with your own files.
+   - That folder becomes your workspace (e.g., `~/Documents/test-workspace`).
 
 2. **Initialize the Workspace Kit (Optional, Recommended)**
    - Open **Settings** > **Memory Hub**
@@ -116,6 +142,11 @@ Generated documents, spreadsheets, presentations, and web pages appear as artifa
    - Execute steps using available tools
    - Show real-time progress in the timeline
    - Request approval before destructive changes
+
+<p align="center">
+  <img src="../resources/branding/images/cowork-os-4.webp" alt="Task execution timeline" width="700">
+  <br><em>Task runs show live progress, intermediate work, approvals, and outputs in one view.</em>
+</p>
 
 ## Orientation: Where The New Product Surfaces Live
 
@@ -333,14 +364,15 @@ Open **Settings** > **LLM**:
 | Provider | Setup |
 |----------|-------|
 | Claude | Use **Claude API** with a key from [console.anthropic.com](https://console.anthropic.com), or use **Claude Subscription** with a token from `claude setup-token` |
-| Google Gemini | Enter API key from [aistudio.google.com](https://aistudio.google.com/apikey) |
-| OpenRouter | Enter API key from [openrouter.ai](https://openrouter.ai/keys); select `openrouter/pareto-code` or `openrouter/pareto-code:nitro` for coding-score-based routing |
+| Google Gemini | Enter API key from [aistudio.google.com](https://aistudio.google.com/apikey); Google AI Studio free usage may be available subject to current limits |
+| OpenRouter | Enter API key from [openrouter.ai](https://openrouter.ai/keys); free model options are available, and `openrouter/pareto-code` / `openrouter/pareto-code:nitro` support coding-score-based routing |
 | OpenAI (API Key) | Enter API key from [platform.openai.com](https://platform.openai.com/api-keys) |
 | OpenAI (ChatGPT) | Click "Sign in with ChatGPT" to use your subscription |
 | AWS Bedrock | Enter AWS Access Key, Secret Key, and Region |
 | Ollama | Install Ollama, pull a model, select it |
-| Groq | Enter API key in Settings |
-| xAI (Grok) | Enter API key in Settings |
+| Groq | Enter API key in Settings; free usage may be available subject to current limits |
+| xAI (Grok API) | Enter API key in Settings |
+| xAI Grok OAuth | Sign in with Grok to use an active SuperGrok subscription; defaults to `grok-4.3` |
 | Kimi (Moonshot) | Enter API key in Settings |
 
 Prompt caching is enabled by default on supported Anthropic and GPT-style routes. CoWork automatically keeps stable session prompt sections cacheable and dynamic turn context uncached, so follow-ups can reuse the provider-side prefix without caching the clock, recall, or one-off guidance.
