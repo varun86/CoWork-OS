@@ -570,6 +570,34 @@ describe("AgentDaemon.completeTask", () => {
     expect(timelineErrorPayload.failedMutationRequiredStepIds).toEqual(["step:build"]);
   });
 
+  it("auto-waives non-mutation failed steps for soft-deadline best-effort completion", () => {
+    const daemonLike = createDaemonLike();
+    daemonLike.failedPlanStepsByTask.set("task-1", new Set(["1"]));
+    daemonLike.knownPlanStepIdsByTask.set("task-1", new Set(["1"]));
+    daemonLike.normalizeStepIdForPlanTracking = AgentDaemon.prototype["normalizeStepIdForPlanTracking"];
+    daemonLike.isSyntheticNonPlanStepId = AgentDaemon.prototype["isSyntheticNonPlanStepId"];
+    daemonLike.isKnownPlanStepId = AgentDaemon.prototype["isKnownPlanStepId"];
+    daemonLike.getUnresolvedFailedSteps = AgentDaemon.prototype["getUnresolvedFailedSteps"];
+
+    AgentDaemon.prototype.completeTask.call(daemonLike, "task-1", "partial", {
+      terminalStatus: "partial_success",
+      failureClass: "optional_enrichment",
+      terminalStatusReason: "Soft deadline reached during execution. Finalizing with best-effort answer.",
+    });
+
+    expect(daemonLike.taskRepo.update).toHaveBeenCalledWith(
+      "task-1",
+      expect.objectContaining({
+        status: "completed",
+        terminalStatus: "partial_success",
+      }),
+    );
+    expect(daemonLike.taskRepo.update).not.toHaveBeenCalledWith(
+      "task-1",
+      expect.objectContaining({ status: "failed" }),
+    );
+  });
+
   it("keeps timeline_error step IDs out of unresolved plan-step gate", () => {
     const daemonLike = createDaemonLike();
     daemonLike.getUnresolvedFailedSteps.mockReturnValue([]);
