@@ -294,7 +294,7 @@ const SIDEBAR_TITLE_ELLIPSIS = "...";
 
 type TextMeasurer = (value: string) => number;
 
-export function truncateSidebarTitleAtWordBoundary(
+export function truncateSidebarTitleToFit(
   value: string,
   maxWidth: number,
   measureText: TextMeasurer,
@@ -307,16 +307,14 @@ export function truncateSidebarTitleAtWordBoundary(
   const ellipsisWidth = measureText(SIDEBAR_TITLE_ELLIPSIS);
   if (ellipsisWidth > maxWidth) return "";
 
-  const words = normalized.split(" ");
-  if (words.length <= 1) return SIDEBAR_TITLE_ELLIPSIS;
-
   let low = 0;
-  let high = words.length - 1;
+  let high = normalized.length;
   let best = "";
 
   while (low <= high) {
     const mid = Math.floor((low + high) / 2);
-    const candidate = `${words.slice(0, mid + 1).join(" ")}${SIDEBAR_TITLE_ELLIPSIS}`;
+    const prefix = normalized.slice(0, mid).trimEnd();
+    const candidate = `${prefix}${SIDEBAR_TITLE_ELLIPSIS}`;
     if (measureText(candidate) <= maxWidth) {
       best = candidate;
       low = mid + 1;
@@ -378,7 +376,7 @@ function SidebarWordBoundaryTitle({
       }
 
       context.font = getElementFont(element);
-      const next = truncateSidebarTitleAtWordBoundary(
+      const next = truncateSidebarTitleToFit(
         text,
         width,
         (candidate) => context.measureText(candidate).width,
