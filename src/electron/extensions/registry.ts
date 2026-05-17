@@ -33,10 +33,17 @@ import { ChannelAdapter, ChannelConfig } from "../gateway/channels/types";
 import { getUserDataDir } from "../utils/user-data-dir";
 import { getSafeStorage } from "../utils/safe-storage";
 import { createLogger } from "../utils/logger";
+import { isPackAllowed, isPackRequired, loadPoliciesStrict } from "../admin/policies";
 
 // Package version (will be replaced at build time or read from package.json)
 const COWORK_VERSION = process.env.npm_package_version || "0.3.0";
 const logger = createLogger("PluginRegistry");
+
+interface PersistedPackStates {
+  updatedAt?: number;
+  packs?: Record<string, boolean>;
+  skills?: Record<string, Record<string, boolean>>;
+}
 
 /**
  * Plugin Registry - Singleton manager for all plugins
@@ -83,38 +90,59 @@ export class PluginRegistry extends EventEmitter {
   }
 
   /**
-   * Load persisted pack toggle states from disk
+   * Load persisted pack toggle states from secure settings, with legacy disk fallback.
    */
   private loadPackStates(): void {
+    const applyPersistedState = (data: PersistedPackStates | Record<string, boolean>): void => {
+      if (!data || typeof data !== "object" || Array.isArray(data)) {
+        return;
+      }
+
+      const maybePayload = data as PersistedPackStates;
+      const packs = maybePayload.packs || (data as Record<string, boolean>);
+      for (const [name, enabled] of Object.entries(packs)) {
+        if (typeof enabled === "boolean") {
+          this.packStates.set(name, enabled);
+        }
+      }
+
+      if (maybePayload.skills && typeof maybePayload.skills === "object") {
+        for (const [packName, skills] of Object.entries(maybePayload.skills)) {
+          if (!skills || typeof skills !== "object" || Array.isArray(skills)) continue;
+          const skillMap = new Map<string, boolean>();
+          for (const [skillId, enabled] of Object.entries(skills)) {
+            if (typeof enabled === "boolean") {
+              skillMap.set(skillId, enabled);
+            }
+          }
+          if (skillMap.size > 0) {
+            this.skillStates.set(packName, skillMap);
+          }
+        }
+      }
+    };
+
+    if (SecureSettingsRepository.isInitialized()) {
+      try {
+        const repository = SecureSettingsRepository.getInstance();
+        const stored = repository.load<PersistedPackStates>("plugin-packs");
+        if (stored) {
+          applyPersistedState(stored);
+          return;
+        }
+      } catch (error) {
+        logger.warn("Failed to load pack states from secure settings:", error);
+      }
+    }
+
     try {
       if (fs.existsSync(this.packStatesPath)) {
-        const data = JSON.parse(fs.readFileSync(this.packStatesPath, "utf-8"));
-        if (data && typeof data === "object") {
-          // Load pack states
-          const packs = data.packs || data;
-          for (const [name, enabled] of Object.entries(packs)) {
-            if (typeof enabled === "boolean") {
-              this.packStates.set(name, enabled);
-            }
-          }
-          // Load skill states
-          if (data.skills && typeof data.skills === "object") {
-            for (const [packName, skills] of Object.entries(data.skills)) {
-              if (skills && typeof skills === "object") {
-                const skillMap = new Map<string, boolean>();
-                for (const [skillId, enabled] of Object.entries(
-                  skills as Record<string, boolean>,
-                )) {
-                  if (typeof enabled === "boolean") {
-                    skillMap.set(skillId, enabled);
-                  }
-                }
-                if (skillMap.size > 0) {
-                  this.skillStates.set(packName, skillMap);
-                }
-              }
-            }
-          }
+        const data = JSON.parse(fs.readFileSync(this.packStatesPath, "utf-8")) as
+          | PersistedPackStates
+          | Record<string, boolean>;
+        applyPersistedState(data);
+        if (SecureSettingsRepository.isInitialized()) {
+          this.savePackStates();
         }
       }
     } catch {
@@ -123,29 +151,41 @@ export class PluginRegistry extends EventEmitter {
   }
 
   /**
-   * Save pack toggle states to disk
+   * Save pack toggle states to secure settings, with legacy disk fallback for early startup/tests.
    */
   savePackStates(): void {
+    const packs: Record<string, boolean> = {};
+    for (const [name, enabled] of this.packStates) {
+      packs[name] = enabled;
+    }
+    const skills: Record<string, Record<string, boolean>> = {};
+    for (const [packName, skillMap] of this.skillStates) {
+      const entries: Record<string, boolean> = {};
+      for (const [skillId, enabled] of skillMap) {
+        entries[skillId] = enabled;
+      }
+      if (Object.keys(entries).length > 0) {
+        skills[packName] = entries;
+      }
+    }
+    const payload: PersistedPackStates = { updatedAt: Date.now(), packs, skills };
+
+    if (SecureSettingsRepository.isInitialized()) {
+      try {
+        SecureSettingsRepository.getInstance().save("plugin-packs", payload);
+        return;
+      } catch (error) {
+        logger.warn("Failed to save pack states to secure settings:", error);
+        throw error;
+      }
+    }
+
     try {
       const dir = path.dirname(this.packStatesPath);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      const packs: Record<string, boolean> = {};
-      for (const [name, enabled] of this.packStates) {
-        packs[name] = enabled;
-      }
-      const skills: Record<string, Record<string, boolean>> = {};
-      for (const [packName, skillMap] of this.skillStates) {
-        const entries: Record<string, boolean> = {};
-        for (const [skillId, enabled] of skillMap) {
-          entries[skillId] = enabled;
-        }
-        if (Object.keys(entries).length > 0) {
-          skills[packName] = entries;
-        }
-      }
-      fs.writeFileSync(this.packStatesPath, JSON.stringify({ packs, skills }, null, 2), "utf-8");
+      fs.writeFileSync(this.packStatesPath, JSON.stringify(payload, null, 2), "utf-8");
     } catch (error) {
       logger.warn("Failed to save pack states:", error);
     }
@@ -155,7 +195,30 @@ export class PluginRegistry extends EventEmitter {
    * Set and persist a pack's enabled state
    */
   setPackEnabled(name: string, enabled: boolean): void {
+    const hadPreviousState = this.packStates.has(name);
+    const previousState = this.packStates.get(name);
     this.packStates.set(name, enabled);
+    try {
+      this.savePackStates();
+    } catch (error) {
+      if (hadPreviousState && previousState !== undefined) {
+        this.packStates.set(name, previousState);
+      } else {
+        this.packStates.delete(name);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Restore a pack's persisted enabled state after a failed runtime transition.
+   */
+  restorePackEnabled(name: string, enabled: boolean | undefined): void {
+    if (enabled === undefined) {
+      this.packStates.delete(name);
+    } else {
+      this.packStates.set(name, enabled);
+    }
     this.savePackStates();
   }
 
@@ -170,11 +233,27 @@ export class PluginRegistry extends EventEmitter {
    * Set and persist a skill's enabled state within a pack
    */
   setSkillEnabled(packName: string, skillId: string, enabled: boolean): void {
-    if (!this.skillStates.has(packName)) {
+    const hadSkillMap = this.skillStates.has(packName);
+    const skillMap = this.skillStates.get(packName);
+    const hadPreviousState = skillMap?.has(skillId) ?? false;
+    const previousState = skillMap?.get(skillId);
+
+    if (!skillMap) {
       this.skillStates.set(packName, new Map());
     }
     this.skillStates.get(packName)!.set(skillId, enabled);
-    this.savePackStates();
+    try {
+      this.savePackStates();
+    } catch (error) {
+      if (!hadSkillMap) {
+        this.skillStates.delete(packName);
+      } else if (hadPreviousState && previousState !== undefined) {
+        this.skillStates.get(packName)!.set(skillId, previousState);
+      } else {
+        this.skillStates.get(packName)!.delete(skillId);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -182,6 +261,22 @@ export class PluginRegistry extends EventEmitter {
    */
   getSkillEnabled(packName: string, skillId: string): boolean | undefined {
     return this.skillStates.get(packName)?.get(skillId);
+  }
+
+  /**
+   * Apply persisted per-skill states to the manifest before it is sent to UI or registered.
+   */
+  private applyPersistedSkillStates(manifest: PluginManifest, pluginName: string): void {
+    const savedSkillStates = this.skillStates.get(pluginName);
+    if (!savedSkillStates || !manifest.skills) {
+      return;
+    }
+    for (const skill of manifest.skills) {
+      const savedSkillState = savedSkillStates.get(skill.id);
+      if (savedSkillState !== undefined) {
+        skill.enabled = savedSkillState;
+      }
+    }
   }
 
   /** Remove persisted state for a pack (used when a pack is fully uninstalled). */
@@ -273,6 +368,40 @@ export class PluginRegistry extends EventEmitter {
       return;
     }
 
+    const isPack = manifest.type === "pack";
+    const policies = isPack ? loadPoliciesStrict() : null;
+    const savedState = this.packStates.get(pluginName);
+    const blockedByPolicy = isPack && (!policies || !isPackAllowed(pluginName, policies));
+    const requiredByPolicy = isPack && !!policies && isPackRequired(pluginName, policies);
+    const shouldStartDisabled =
+      isPack && (blockedByPolicy || (savedState === false && !requiredByPolicy));
+
+    if (shouldStartDisabled) {
+      this.applyPersistedSkillStates(manifest, pluginName);
+      const loadedPlugin: LoadedPlugin = {
+        manifest,
+        instance: {
+          manifest,
+          register: async () => {
+            // Disabled packs do not execute plugin entrypoints.
+          },
+          unregister: async () => {
+            // No runtime state was registered for disabled packs.
+          },
+        },
+        path: pluginPath,
+        state: "disabled",
+        loadedAt: new Date(),
+        securityReport,
+      };
+      this.plugins.set(pluginName, loadedPlugin);
+      const config = this.loadPluginConfig(pluginName);
+      this.configs.set(pluginName, config);
+      this.emitPluginEvent("plugin:registered", pluginName);
+      logger.debug(`Plugin ${pluginName} loaded disabled without executing runtime code`);
+      return;
+    }
+
     try {
       // Load the plugin
       const result = await loadPlugin(pluginPath);
@@ -286,22 +415,21 @@ export class PluginRegistry extends EventEmitter {
       if (securityReport) {
         loadedPlugin.securityReport = securityReport;
       }
-      this.plugins.set(pluginName, loadedPlugin);
 
-      const savedState = this.packStates.get(pluginName);
-      const shouldStartDisabled = loadedPlugin.manifest.type === "pack" && savedState === false;
+      this.applyPersistedSkillStates(loadedPlugin.manifest, pluginName);
+      this.plugins.set(pluginName, loadedPlugin);
 
       // Load configuration
       const config = this.loadPluginConfig(pluginName);
       this.configs.set(pluginName, config);
 
-      // Create plugin API
-      const api = this.createPluginAPI(pluginName, loadedPlugin);
-
-      // Register the plugin
-      await loadedPlugin.instance.register(api);
-
       if (!shouldStartDisabled) {
+        // Create plugin API
+        const api = this.createPluginAPI(pluginName, loadedPlugin);
+
+        // Register the plugin
+        await loadedPlugin.instance.register(api);
+
         // Handle composite declarative content (skills, agentRoles, connectors)
         await this.registerDeclarativeContent(loadedPlugin.manifest, pluginName);
       }
@@ -312,6 +440,7 @@ export class PluginRegistry extends EventEmitter {
       logger.debug(`Plugin ${pluginName} registered successfully`);
     } catch (error) {
       logger.error(`Error registering plugin ${pluginName}:`, error);
+      await this.removePluginRuntimeRegistrations(pluginName);
 
       const loadedPlugin = this.plugins.get(pluginName);
       if (loadedPlugin) {
@@ -434,11 +563,6 @@ export class PluginRegistry extends EventEmitter {
           }
           this.skillOwnership.set(skill.id, pluginName);
 
-          // Apply persisted per-skill toggle state
-          const savedSkillState = this.skillStates.get(pluginName)?.get(skill.id);
-          if (savedSkillState !== undefined) {
-            skill.enabled = savedSkillState;
-          }
           skill.source = "managed" as const;
           skill.metadata = {
             ...skill.metadata,
@@ -739,6 +863,33 @@ export class PluginRegistry extends EventEmitter {
     this.emit(type, event);
   }
 
+  /**
+   * Remove runtime registrations owned by a plugin without deleting the loaded manifest.
+   */
+  private async removePluginRuntimeRegistrations(pluginName: string): Promise<void> {
+    try {
+      const { getCustomSkillLoader } = await import("../agent/custom-skill-loader");
+      getCustomSkillLoader().unregisterPluginSkills(pluginName);
+    } catch (error) {
+      logger.warn(`Failed to unregister plugin skills for ${pluginName}:`, error);
+    }
+
+    this.channelAdapters.delete(pluginName);
+    this.pluginEventHandlers.delete(pluginName);
+
+    for (const key of Array.from(this.tools.keys())) {
+      if (key.startsWith(`${pluginName}:`)) {
+        this.tools.delete(key);
+      }
+    }
+
+    for (const [skillId, owner] of Array.from(this.skillOwnership.entries())) {
+      if (owner === pluginName) {
+        this.skillOwnership.delete(skillId);
+      }
+    }
+  }
+
   // ============================================================================
   // Public API
   // ============================================================================
@@ -762,6 +913,39 @@ export class PluginRegistry extends EventEmitter {
    */
   getPluginsByType(type: PluginType): LoadedPlugin[] {
     return Array.from(this.plugins.values()).filter((p) => p.manifest.type === type);
+  }
+
+  /**
+   * Reconcile loaded pack runtime state after admin policy or persisted state changes.
+   */
+  async reconcilePackRuntimeState(): Promise<void> {
+    const policies = loadPoliciesStrict();
+    if (!policies) {
+      logger.warn("Skipping plugin pack runtime reconciliation because policies failed to load");
+      return;
+    }
+    for (const plugin of this.getPluginsByType("pack")) {
+      const pluginName = plugin.manifest.name;
+      const allowed = isPackAllowed(pluginName, policies);
+      const required = isPackRequired(pluginName, policies);
+      const savedState = this.packStates.get(pluginName);
+
+      if (!allowed) {
+        await this.disablePlugin(pluginName);
+        continue;
+      }
+
+      if (plugin.state === "disabled") {
+        if (required || savedState !== false) {
+          await this.reloadPlugin(pluginName);
+        }
+        continue;
+      }
+
+      if (!required && savedState === false) {
+        await this.disablePlugin(pluginName);
+      }
+    }
   }
 
   /**
@@ -838,6 +1022,7 @@ export class PluginRegistry extends EventEmitter {
     }
 
     if (plugin.state === "disabled") {
+      await this.removePluginRuntimeRegistrations(name);
       return;
     }
 
@@ -849,6 +1034,8 @@ export class PluginRegistry extends EventEmitter {
         console.error(`Error unregistering plugin ${name}:`, error);
       }
     }
+
+    await this.removePluginRuntimeRegistrations(name);
 
     plugin.state = "disabled";
     this.emitPluginEvent("plugin:unregistered", name);
@@ -862,23 +1049,7 @@ export class PluginRegistry extends EventEmitter {
 
     // Remove from all registries
     this.plugins.delete(name);
-    this.channelAdapters.delete(name);
     this.configs.delete(name);
-    this.pluginEventHandlers.delete(name);
-
-    // Remove tools for this plugin
-    for (const key of this.tools.keys()) {
-      if (key.startsWith(`${name}:`)) {
-        this.tools.delete(key);
-      }
-    }
-
-    // Remove skill ownership entries for this plugin
-    for (const [skillId, owner] of this.skillOwnership) {
-      if (owner === name) {
-        this.skillOwnership.delete(skillId);
-      }
-    }
   }
 
   /**
@@ -891,6 +1062,8 @@ export class PluginRegistry extends EventEmitter {
     }
 
     const pluginPath = plugin.path;
+    const securityReport = plugin.securityReport;
+    const previousPlugin = plugin;
     await this.unloadPlugin(name);
 
     // Clear require cache for script-based plugins.
@@ -906,8 +1079,18 @@ export class PluginRegistry extends EventEmitter {
 
     // Reload
     const result = await loadPlugin(pluginPath);
-    if (result.success && result.plugin) {
-      await this.loadAndRegister(pluginPath, result.plugin.manifest);
+    if (!result.success || !result.plugin) {
+      previousPlugin.state = "disabled";
+      this.plugins.set(name, previousPlugin);
+      throw new Error(`Failed to reload plugin ${name}: ${result.error || "unknown error"}`);
+    }
+
+    await this.loadAndRegister(pluginPath, result.plugin.manifest, securityReport);
+    const reloaded = this.plugins.get(name);
+    if (!reloaded || reloaded.state === "error") {
+      previousPlugin.state = "disabled";
+      this.plugins.set(name, previousPlugin);
+      throw new Error(`Failed to reload plugin ${name}`);
     }
   }
 
