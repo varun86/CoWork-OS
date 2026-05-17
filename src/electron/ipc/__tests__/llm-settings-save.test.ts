@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LLMSettingsData } from "../../../shared/types";
+import { LLMSettingsSchema } from "../../utils/validation";
 import { buildSavedLLMSettings } from "../llm-settings-save";
 
 describe("buildSavedLLMSettings", () => {
@@ -333,5 +334,45 @@ describe("buildSavedLLMSettings", () => {
       subscriptionToken: "sk-ant-oat01-subscription-token",
       apiKey: "sk-ant-api-key",
     });
+  });
+});
+
+describe("LLMSettingsSchema", () => {
+  it("accepts long OpenAI OAuth tokens and account metadata", () => {
+    const accessToken = "a".repeat(5000);
+    const refreshToken = "r".repeat(5000);
+
+    const parsed = LLMSettingsSchema.parse({
+      providerType: "openai",
+      modelKey: "gpt-5.5",
+      openai: {
+        authMethod: "oauth",
+        model: "gpt-5.5",
+        accessToken,
+        refreshToken,
+        tokenExpiresAt: 12345,
+        accountId: "acct_test",
+        email: "user@example.com",
+      },
+    });
+
+    expect(parsed.openai?.accessToken).toBe(accessToken);
+    expect(parsed.openai?.refreshToken).toBe(refreshToken);
+    expect(parsed.openai?.accountId).toBe("acct_test");
+    expect(parsed.openai?.email).toBe("user@example.com");
+  });
+
+  it("keeps OpenAI OAuth token validation bounded", () => {
+    expect(() =>
+      LLMSettingsSchema.parse({
+        providerType: "openai",
+        modelKey: "gpt-5.5",
+        openai: {
+          authMethod: "oauth",
+          model: "gpt-5.5",
+          accessToken: "a".repeat(16 * 1024 + 1),
+        },
+      }),
+    ).toThrow();
   });
 });
