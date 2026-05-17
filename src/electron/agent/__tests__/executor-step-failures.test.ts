@@ -1311,6 +1311,7 @@ relationship_memory:
       {},
     );
     (executor as Any).shouldPauseForQuestions = true;
+    (executor as Any).shouldPauseForRequiredDecision = true;
 
     const step: Any = { id: "3", description: "Clarify requirements", status: "pending" };
 
