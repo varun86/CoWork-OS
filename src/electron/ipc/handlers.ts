@@ -53,6 +53,12 @@ import { ManagedSessionService } from "../managed/ManagedSessionService";
 import { AgentTemplateService } from "../managed/AgentTemplateService";
 import { AgentBuilderService, type AgentBuilderInventory } from "../managed/AgentBuilderService";
 import { ImageGenProfileService } from "../managed/ImageGenProfileService";
+import { EverydayAgentService } from "../everyday-agent/EverydayAgentService";
+import { setupEverydayAgentHandlers } from "./everyday-agent-handlers";
+import {
+  rendererPerfLogLevel,
+  stringifyRendererPerfPayload,
+} from "./renderer-perf-log";
 import type { RoutineService } from "../routines/service";
 import type { RoutineCreate, RoutineTrigger } from "../routines/types";
 
@@ -140,6 +146,7 @@ import {
   LLMProviderConfig,
   ModelKey,
   OpenAIOAuth,
+  XAIOAuth,
 } from "../agent/llm";
 import {
   SearchProviderFactory,
@@ -304,6 +311,7 @@ import {
 } from "../hooks";
 import { initializeHookAgentIngress } from "../hooks/agent-ingress";
 import { MemoryService } from "../memory/MemoryService";
+import { DurableContextService } from "../memory/DurableContextService";
 import { MemoryObservationService } from "../memory/MemoryObservationService";
 import { MemorySynthesizer } from "../memory/MemorySynthesizer";
 import { CuratedMemoryService } from "../memory/CuratedMemoryService";
@@ -455,14 +463,6 @@ const MemoryObservationRebuildSchema = z.object({
   force: z.boolean().optional(),
 }).strict();
 const logger = createLogger("IPC");
-function stringifyRendererPerfPayload(payload: unknown): string {
-  if (typeof payload === "string") return payload;
-  try {
-    return JSON.stringify(payload);
-  } catch {
-    return String(payload);
-  }
-}
 const ProfileNameSchema = z.string().trim().min(1).max(80);
 const VIDEO_PREVIEW_CACHE_DIR = path.join(
   os.tmpdir(),
@@ -953,6 +953,14 @@ rateLimiter.configure(
   RATE_LIMIT_CONFIGS.standard,
 );
 rateLimiter.configure(
+  IPC_CHANNELS.LLM_XAI_OAUTH_START,
+  RATE_LIMIT_CONFIGS.expensive,
+);
+rateLimiter.configure(
+  IPC_CHANNELS.LLM_XAI_OAUTH_LOGOUT,
+  RATE_LIMIT_CONFIGS.limited,
+);
+rateLimiter.configure(
   IPC_CHANNELS.LLM_GET_KIMI_MODELS,
   RATE_LIMIT_CONFIGS.standard,
 );
@@ -1198,6 +1206,7 @@ export async function setupIpcHandlers(
   const managedSessionService = new ManagedSessionService(db, agentDaemon, {
     getRoutineService,
   });
+  setupEverydayAgentHandlers(new EverydayAgentService(db));
   const agentTemplateService = new AgentTemplateService();
   const agentBuilderService = new AgentBuilderService();
   const imageGenProfileService = new ImageGenProfileService();
@@ -1758,7 +1767,12 @@ export async function setupIpcHandlers(
   };
 
   ipcMain.handle(IPC_CHANNELS.RENDERER_PERF_LOG, async (_event, payload: unknown) => {
-    logger.info(`[RendererPerf] ${stringifyRendererPerfPayload(payload)}`);
+    const line = `[RendererPerf] ${stringifyRendererPerfPayload(payload)}`;
+    if (rendererPerfLogLevel(payload) === "info") {
+      logger.info(line);
+    } else {
+      logger.debug(line);
+    }
     return { success: true };
   });
 
@@ -2888,9 +2902,9 @@ export async function setupIpcHandlers(
 
   ipcMain.handle(
     IPC_CHANNELS.MAILBOX_SYNC,
-    async (event, data?: { limit?: number }) => {
+    async (event, data?: { limit?: number; source?: "auto" | "manual" }) => {
       assertTrustedMailboxSender(event);
-      return mailboxService.sync(data?.limit);
+      return mailboxService.sync(data?.limit, { source: data?.source || "manual" });
     },
   );
 
@@ -5571,6 +5585,18 @@ export async function setupIpcHandlers(
           updatedSettings.xai = undefined;
           updatedSettings.cachedXaiModels = undefined;
           break;
+        case "xai-oauth":
+          updatedSettings.xai = {
+            ...updatedSettings.xai,
+            accessToken: undefined,
+            refreshToken: undefined,
+            tokenExpiresAt: undefined,
+            tokenEndpoint: undefined,
+            idToken: undefined,
+            authMethod: undefined,
+          };
+          updatedSettings.cachedXaiModels = undefined;
+          break;
         case "deepseek":
           updatedSettings.deepseek = undefined;
           updatedSettings.cachedDeepSeekModels = undefined;
@@ -5617,6 +5643,17 @@ export async function setupIpcHandlers(
       openaiAccessToken = settings.openai?.accessToken;
       openaiRefreshToken = settings.openai?.refreshToken;
       openaiTokenExpiresAt = settings.openai?.tokenExpiresAt;
+    }
+    let xaiAccessToken: string | undefined;
+    let xaiRefreshToken: string | undefined;
+    let xaiTokenExpiresAt: number | undefined;
+    let xaiTokenEndpoint: string | undefined;
+    if (validatedConfig.providerType === "xai-oauth") {
+      const settings = LLMProviderFactory.loadSettings();
+      xaiAccessToken = settings.xai?.accessToken;
+      xaiRefreshToken = settings.xai?.refreshToken;
+      xaiTokenExpiresAt = settings.xai?.tokenExpiresAt;
+      xaiTokenEndpoint = settings.xai?.tokenEndpoint;
     }
     const resolvedProviderType = resolveCustomProviderId(validatedConfig.providerType);
     const customProviderConfig =
@@ -5709,6 +5746,10 @@ export async function setupIpcHandlers(
       groqApiKey: validateOptionalProviderApiKey(validatedConfig.groq?.apiKey, "Groq"),
       groqBaseUrl,
       xaiApiKey: validateOptionalProviderApiKey(validatedConfig.xai?.apiKey, "xAI"),
+      xaiAccessToken,
+      xaiRefreshToken,
+      xaiTokenExpiresAt,
+      xaiTokenEndpoint,
       xaiBaseUrl,
       kimiApiKey: validateOptionalProviderApiKey(validatedConfig.kimi?.apiKey, "Kimi"),
       kimiBaseUrl,
@@ -6047,7 +6088,7 @@ export async function setupIpcHandlers(
   );
 
   // OpenAI OAuth handlers
-  ipcMain.handle(IPC_CHANNELS.LLM_OPENAI_OAUTH_START, async () => {
+  ipcMain.handle(IPC_CHANNELS.LLM_OPENAI_OAUTH_START, async (_, options?: { persist?: boolean }) => {
     checkRateLimit(IPC_CHANNELS.LLM_OPENAI_OAUTH_START);
     logger.info("[IPC] Starting OpenAI OAuth flow with pi-ai SDK...");
 
@@ -6055,25 +6096,40 @@ export async function setupIpcHandlers(
       const oauth = new OpenAIOAuth();
       const tokens = await oauth.authenticate();
 
-      // Save tokens to settings
-      const settings = LLMProviderFactory.loadSettings();
-      settings.openai = {
-        ...settings.openai,
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        tokenExpiresAt: tokens.expires_at,
-        accountId: tokens.accountId,
-        email: tokens.email,
-        authMethod: "oauth",
-        // Clear API key when using OAuth
-        apiKey: undefined,
-      };
-      LLMProviderFactory.saveSettings(settings);
-      LLMProviderFactory.clearCache();
+      const shouldPersist = options?.persist !== false;
+      if (shouldPersist) {
+        // Save tokens to settings
+        const settings = LLMProviderFactory.loadSettings();
+        settings.openai = {
+          ...settings.openai,
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token,
+          tokenExpiresAt: tokens.expires_at,
+          accountId: tokens.accountId,
+          email: tokens.email,
+          authMethod: "oauth",
+          // Clear API key when using OAuth
+          apiKey: undefined,
+        };
+        LLMProviderFactory.saveSettings(settings);
+        LLMProviderFactory.clearCache();
+      }
 
       logger.info("[IPC] OpenAI OAuth successful");
 
-      return { success: true, email: tokens.email };
+      return {
+        success: true,
+        email: tokens.email,
+        tokens: shouldPersist
+          ? undefined
+          : {
+              accessToken: tokens.access_token,
+              refreshToken: tokens.refresh_token,
+              tokenExpiresAt: tokens.expires_at,
+              accountId: tokens.accountId,
+              email: tokens.email,
+            },
+      };
     } catch (error: Any) {
       logger.error("[IPC] OpenAI OAuth failed:", error.message);
       return { success: false, error: error.message };
@@ -6100,6 +6156,58 @@ export async function setupIpcHandlers(
       LLMProviderFactory.saveSettings(settings);
     }
 
+    return { success: true };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.LLM_XAI_OAUTH_START, async () => {
+    checkRateLimit(IPC_CHANNELS.LLM_XAI_OAUTH_START);
+    logger.info("[IPC] Starting xAI Grok OAuth flow...");
+
+    try {
+      const oauth = new XAIOAuth();
+      const tokens = await oauth.authenticate();
+
+      const settings = LLMProviderFactory.loadSettings();
+      settings.providerType = "xai-oauth";
+      settings.modelKey = settings.xai?.model || "grok-4.3";
+      settings.xai = {
+        ...settings.xai,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        tokenExpiresAt: tokens.expires_at,
+        tokenEndpoint: tokens.token_endpoint,
+        idToken: tokens.id_token,
+        authMethod: "oauth",
+        model: settings.xai?.model || "grok-4.3",
+        baseUrl: settings.xai?.baseUrl || "https://api.x.ai/v1",
+      };
+      LLMProviderFactory.saveSettings(settings);
+      LLMProviderFactory.clearCache();
+
+      return { success: true };
+    } catch (error: Any) {
+      logger.error("[IPC] xAI Grok OAuth failed:", error.message);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.LLM_XAI_OAUTH_LOGOUT, async () => {
+    checkRateLimit(IPC_CHANNELS.LLM_XAI_OAUTH_LOGOUT);
+    const settings = LLMProviderFactory.loadSettings();
+    if (settings.xai) {
+      settings.xai = {
+        ...settings.xai,
+        accessToken: undefined,
+        refreshToken: undefined,
+        tokenExpiresAt: undefined,
+        tokenEndpoint: undefined,
+        idToken: undefined,
+        authMethod: undefined,
+      };
+      settings.cachedXaiModels = undefined;
+      LLMProviderFactory.saveSettings(settings);
+      LLMProviderFactory.clearCache();
+    }
     return { success: true };
   });
 
@@ -9155,7 +9263,10 @@ export async function setupIpcHandlers(
         typeof queryOrWorkspaceId === "string"
           ? queryOrWorkspaceId
           : queryOrWorkspaceId?.workspaceId;
-      const validated = validateInput(UUIDSchema, workspaceId, "workspace ID");
+      if (typeof workspaceId !== "string" || workspaceId.trim().length === 0) {
+        return [];
+      }
+      const validated = validateInput(WorkspaceIdSchema, workspaceId, "workspace ID");
       return taskLabelRepo.list({ workspaceId: validated });
     },
   );
@@ -9163,7 +9274,7 @@ export async function setupIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.TASK_LABEL_CREATE, async (_, request: Any) => {
     checkRateLimit(IPC_CHANNELS.TASK_LABEL_CREATE);
     const validatedWorkspaceId = validateInput(
-      UUIDSchema,
+      WorkspaceIdSchema,
       request.workspaceId,
       "workspace ID",
     );
@@ -11524,29 +11635,32 @@ function setupKitHandlers(
         relPath: path.join(kitDirName, "SOUL.md"),
         content:
           `# SOUL.md\n\n` +
-          `## Vibe\n` +
-          `Smart. Direct. A little dangerous (in a good way).\n` +
-          `You have taste and you pick a recommendation.\n` +
-          `Charm over cruelty. Clarity over caveats.\n` +
-          `Be the assistant you'd actually want to talk to at 2am. Not a corporate drone. Not a sycophant. Just... good.\n\n` +
-          `## Defaults\n` +
-          `- Answer first. Explanations only if they add value.\n` +
-          `- If there are options, pick the best one and say why in 1-3 bullets.\n` +
-          `- Ask at most one clarifying question unless you're truly blocked.\n\n` +
-          `## Hard Rules\n` +
-          `- Never open with Great question, I'd be happy to help, or Absolutely. Just answer.\n` +
-          `- Brevity is mandatory. If the answer fits in one sentence, one sentence is what I get.\n` +
-          `- No corporate filler. No "as an AI". No throat-clearing. No recap of my question.\n` +
-          `- "It depends" is allowed only if you immediately name the dependency that changes the decision, then commit to a default.\n\n` +
-          `## Callouts\n` +
-          `- If I'm about to do something dumb, say so and offer the better move.\n` +
-          `- If something is excellent, say so. If it's bad, say it's bad.\n\n` +
-          `## Humor & Swearing\n` +
-          `- Humor is allowed when it comes naturally.\n` +
-          `- Swearing is allowed when it lands. Don't force it. Don't overdo it.\n\n` +
-          `## When You're Not Sure\n` +
-          `- Say what you know, what you don't, and the fastest way to verify.\n` +
-          `- Still give your best-guess recommendation.\n`,
+          `## Role\n` +
+          `You are the workspace operator and thought partner. You do not just answer; you help turn intent into shipped work.\n\n` +
+          `## Private Voice\n` +
+          `- Direct, candid, and concise.\n` +
+          `- Skip preamble and choose a recommendation when the tradeoff is clear.\n` +
+          `- Match the user's pace. Do not perform enthusiasm.\n\n` +
+          `## Public Voice\n` +
+          `- Treat public-facing output as a separate job from private chat.\n` +
+          `- Keep it sharp, audience-safe, and specific to the product/customer/context.\n` +
+          `- Do not leak private shorthand, internal jokes, or workspace-only assumptions.\n\n` +
+          `## Pushback Contract\n` +
+          `- Push back when the request is vague, wasteful, risky, misprioritized, or likely to produce weak output.\n` +
+          `- Earn disagreement with evidence: concrete reasoning, examples, data, code, logs, or a better alternative.\n` +
+          `- Do not be contrarian for sport. If the user's direction is sound, execute it cleanly.\n\n` +
+          `## Accountability Loop\n` +
+          `- Notice repeated asks, ignored outputs, stale priorities, and open loops.\n` +
+          `- If good work is not being used, say what is stuck and propose the next concrete action.\n` +
+          `- If your output is not useful enough to act on, improve it instead of producing more of the same.\n\n` +
+          `## Autonomy Defaults\n` +
+          `- Act on low-stakes implementation details without asking.\n` +
+          `- State assumptions when they matter, then keep moving.\n` +
+          `- Treat .cowork/RULES.md and .cowork/OPERATIONS.md as authoritative for approvals, permissions, and escalation boundaries.\n\n` +
+          `## Quality Bar\n` +
+          `- Working software beats documentation polish.\n` +
+          `- Concrete next steps beat abstract strategy.\n` +
+          `- If there are options, pick the best one and explain why briefly.\n`,
       },
       {
         relPath: path.join(kitDirName, "IDENTITY.md"),
@@ -12731,6 +12845,7 @@ function setupMemoryHandlers(): void {
     checkRateLimit(IPC_CHANNELS.MEMORY_CLEAR, RATE_LIMIT_CONFIGS.limited);
     try {
       MemoryService.clearWorkspace(workspaceId);
+      DurableContextService.clearWorkspace(workspaceId);
       return { success: true };
     } catch (error) {
       logger.error("[Memory] Failed to clear:", error);
