@@ -212,7 +212,7 @@ export function descriptionHasStrongWriteIntent(text: string): boolean {
 
 export function descriptionHasReadOnlyIntent(text: string): boolean {
   const desc = String(text || "").toLowerCase();
-  return /\b(read|analy[sz]e|review|understand|examine|inspect|check|parse|extract|summarize|study|explore|investigate|look)\b/.test(
+  return /\b(read|search|fetch|retrieve|browse|visit|analy[sz]e|review|understand|examine|inspect|check|parse|extract|summarize|study|explore|investigate|look)\b/.test(
     desc,
   );
 }
@@ -220,7 +220,7 @@ export function descriptionHasReadOnlyIntent(text: string): boolean {
 export function descriptionHasDiscoveryIntent(text: string): boolean {
   const desc = String(text || "").toLowerCase();
   return (
-    /\b(locate|find|discover|identify|inventory|catalog|survey|enumerate|scan|detect)\b/.test(desc) ||
+    /\b(search|locate|find|discover|identify|inventory|catalog|survey|enumerate|scan|detect)\b/.test(desc) ||
     /\bclarify\s+scope\b/.test(desc)
   ) && !descriptionHasWriteIntent(desc);
 }
