@@ -12455,6 +12455,9 @@ a,
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .builtin-tool-item code {
