@@ -62,6 +62,66 @@ const WEB_APP_SCAFFOLD_CONTEXT_REGEX =
   /\b(create|build|scaffold|bootstrap|initialize|set up|setup|implement|make)\b[\s\S]{0,120}\b(website|web app|webapp|app|application|ui|interface|react|vite|next\.?js|nextjs|vue|svelte|angular)\b/i;
 const NESTED_PACKAGE_INTENT_REGEX =
   /\b(monorepo|multi[- ]package|nested package|subpackage|workspace package|package workspace)\b/i;
+const LOCAL_MODEL_NETWORK_RESULT_COMPACT_TRIGGER_CHARS = 2_500;
+const LOCAL_MODEL_NETWORK_RESULT_MAX_CHARS = 4_000;
+const LOCAL_MODEL_NETWORK_BODY_MAX_CHARS = 2_200;
+const LOCAL_MODEL_NETWORK_BODY_HEAD_CHARS = 1_400;
+const LOCAL_MODEL_NETWORK_BODY_TAIL_CHARS = 350;
+const LOCAL_MODEL_JSON_ARRAY_ITEMS = 6;
+const LOCAL_MODEL_JSON_STRING_VALUE_MAX_CHARS = 700;
+
+const NETWORK_RESULT_TOOLS = new Set(["http_request", "web_fetch"]);
+const IMPORTANT_JSON_KEYS = [
+  "full_name",
+  "name",
+  "tag_name",
+  "title",
+  "description",
+  "html_url",
+  "url",
+  "homepage",
+  "created_at",
+  "updated_at",
+  "pushed_at",
+  "published_at",
+  "released_at",
+  "stargazers_count",
+  "forks_count",
+  "watchers_count",
+  "subscribers_count",
+  "open_issues_count",
+  "language",
+  "default_branch",
+  "topics",
+  "license",
+  "login",
+  "type",
+  "contributions",
+  "author",
+  "prerelease",
+  "draft",
+  "body",
+  "assets",
+  "browser_download_url",
+  "download_count",
+  "content",
+  "text",
+] as const;
+const NOISY_JSON_KEYS = new Set([
+  "node_id",
+  "avatar_url",
+  "gravatar_id",
+  "followers_url",
+  "following_url",
+  "gists_url",
+  "starred_url",
+  "subscriptions_url",
+  "organizations_url",
+  "repos_url",
+  "events_url",
+  "received_events_url",
+  "site_admin",
+]);
 
 function deriveSearchQueryFromContext(context: string): string {
   const tokens = String(context || "")
@@ -77,6 +137,208 @@ function deriveSearchQueryFromContext(context: string): string {
         !token.startsWith("http"),
     );
   return tokens.slice(0, 6).join(" ");
+}
+
+function safeJsonParseValue(value: string): Any | null {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function compactStringValue(value: string, maxChars = LOCAL_MODEL_JSON_STRING_VALUE_MAX_CHARS): string {
+  if (value.length <= maxChars) return value;
+  const head = Math.max(0, maxChars - 160);
+  return `${value.slice(0, head)}\n[... truncated ${value.length - head} chars ...]`;
+}
+
+function compactHeadersForLocalModel(headers: unknown): Record<string, string> {
+  if (!headers || typeof headers !== "object" || Array.isArray(headers)) return {};
+  const keep = new Set([
+    "content-type",
+    "content-length",
+    "etag",
+    "last-modified",
+    "link",
+    "x-ratelimit-limit",
+    "x-ratelimit-remaining",
+    "x-ratelimit-reset",
+  ]);
+  const compact: Record<string, string> = {};
+  for (const [key, rawValue] of Object.entries(headers as Record<string, unknown>)) {
+    const lowerKey = key.toLowerCase();
+    if (!keep.has(lowerKey)) continue;
+    const value = typeof rawValue === "string" ? rawValue : JSON.stringify(rawValue);
+    compact[key] = compactStringValue(value, 400);
+  }
+  return compact;
+}
+
+function compactJsonValueForLocalModel(value: Any, depth = 0): Any {
+  if (value === null || typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value === "string") return compactStringValue(value);
+  if (Array.isArray(value)) {
+    const items = value
+      .slice(0, LOCAL_MODEL_JSON_ARRAY_ITEMS)
+      .map((item) => compactJsonValueForLocalModel(item, depth + 1));
+    return {
+      _type: "array",
+      originalLength: value.length,
+      items,
+      ...(value.length > items.length ? { omittedItems: value.length - items.length } : {}),
+    };
+  }
+  if (typeof value !== "object") return String(value);
+
+  const source = value as Record<string, Any>;
+  const compact: Record<string, Any> = {};
+  const used = new Set<string>();
+  for (const key of IMPORTANT_JSON_KEYS) {
+    if (!(key in source)) continue;
+    used.add(key);
+    compact[key] = depth >= 3 ? compactStringValue(JSON.stringify(source[key]), 1200) : compactJsonValueForLocalModel(source[key], depth + 1);
+  }
+
+  let extraCount = 0;
+  for (const [key, rawValue] of Object.entries(source)) {
+    if (used.has(key) || NOISY_JSON_KEYS.has(key)) continue;
+    if (extraCount >= 16) break;
+    if (
+      rawValue === null ||
+      typeof rawValue === "string" ||
+      typeof rawValue === "number" ||
+      typeof rawValue === "boolean"
+    ) {
+      compact[key] = compactJsonValueForLocalModel(rawValue, depth + 1);
+      used.add(key);
+      extraCount++;
+    }
+  }
+
+  const omittedKeys = Object.keys(source).filter((key) => !used.has(key) && !NOISY_JSON_KEYS.has(key));
+  if (omittedKeys.length > 0) {
+    compact._omittedKeys = omittedKeys.slice(0, 24);
+    if (omittedKeys.length > 24) compact._omittedKeyCount = omittedKeys.length;
+  }
+  return compact;
+}
+
+function compactTextForLocalModel(text: string): string {
+  if (text.length <= LOCAL_MODEL_NETWORK_BODY_MAX_CHARS) return text;
+  const headingLines = text
+    .split(/\r?\n/)
+    .filter((line) => /^\s{0,3}(#{1,6}\s+|[-*]\s+|release|version|feature|changelog|date\b)/i.test(line))
+    .slice(0, 80)
+    .join("\n");
+  const headingBlock = headingLines ? `\n\n[Extracted headings/key lines]\n${headingLines.slice(0, 3_000)}` : "";
+  return (
+    text.slice(0, LOCAL_MODEL_NETWORK_BODY_HEAD_CHARS) +
+    headingBlock +
+    `\n\n[... truncated ${text.length - LOCAL_MODEL_NETWORK_BODY_HEAD_CHARS - LOCAL_MODEL_NETWORK_BODY_TAIL_CHARS} chars for local model context; refetch URL if exact omitted text is needed ...]\n\n` +
+    text.slice(-LOCAL_MODEL_NETWORK_BODY_TAIL_CHARS)
+  );
+}
+
+function compactNetworkBodyForLocalModel(body: string): string {
+  const parsed = safeJsonParseValue(body);
+  if (parsed !== null) {
+    const compactJson = JSON.stringify(compactJsonValueForLocalModel(parsed), null, 2);
+    return compactJson.length <= LOCAL_MODEL_NETWORK_BODY_MAX_CHARS
+      ? compactJson
+      : compactTextForLocalModel(compactJson);
+  }
+  return compactTextForLocalModel(body);
+}
+
+function compactNetworkEnvelopeForLocalModel(source: Record<string, Any>): Record<string, Any> {
+  const compacted: Record<string, Any> = {};
+  const used = new Set<string>();
+  const topLevelKeys = [
+    "success",
+    "url",
+    "finalUrl",
+    "normalizedUrl",
+    "status",
+    "statusText",
+    "title",
+    "contentLength",
+    "truncated",
+    "error",
+  ];
+
+  for (const key of topLevelKeys) {
+    if (!(key in source)) continue;
+    compacted[key] = compactJsonValueForLocalModel(source[key]);
+    used.add(key);
+  }
+
+  if (source.headers) {
+    compacted.headers = compactHeadersForLocalModel(source.headers);
+    used.add("headers");
+  }
+
+  const bodyKey =
+    typeof source.body === "string"
+      ? "body"
+      : typeof source.content === "string"
+        ? "content"
+        : typeof source.text === "string"
+          ? "text"
+          : "";
+  if (bodyKey) {
+    compacted[bodyKey] = compactNetworkBodyForLocalModel(source[bodyKey] as string);
+    compacted.originalBodyLength = (source[bodyKey] as string).length;
+    used.add(bodyKey);
+  }
+
+  if (Array.isArray(source.links)) {
+    compacted.links = {
+      _type: "array",
+      originalLength: source.links.length,
+      items: source.links.slice(0, 10).map((link) => compactJsonValueForLocalModel(link)),
+      ...(source.links.length > 10 ? { omittedItems: source.links.length - 10 } : {}),
+    };
+    used.add("links");
+  }
+
+  const omittedKeys = Object.keys(source).filter((key) => !used.has(key));
+  if (omittedKeys.length > 0) {
+    compacted._omittedTopLevelKeys = omittedKeys.slice(0, 20);
+    if (omittedKeys.length > 20) compacted._omittedTopLevelKeyCount = omittedKeys.length;
+  }
+
+  return compacted;
+}
+
+export function compactNetworkToolResultForLocalModel(opts: {
+  toolName: string;
+  result: Any;
+  rawResult: string;
+}): string {
+  const toolName = canonicalizeToolName(String(opts.toolName || ""));
+  if (!NETWORK_RESULT_TOOLS.has(toolName)) return opts.rawResult;
+  if (
+    typeof opts.rawResult !== "string" ||
+    opts.rawResult.length <= LOCAL_MODEL_NETWORK_RESULT_COMPACT_TRIGGER_CHARS
+  ) {
+    return opts.rawResult;
+  }
+
+  const parsed = safeJsonParseValue(opts.rawResult);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return compactTextForLocalModel(opts.rawResult);
+  }
+
+  const compacted = compactNetworkEnvelopeForLocalModel(parsed as Record<string, Any>);
+  compacted._cowork_compacted_for_local_model = true;
+  compacted._compaction_note =
+    "Network response compacted for local Ollama context. URLs, dates, counts, headers, and representative body text were preserved; refetch the source URL if exact omitted text is needed.";
+
+  const rendered = JSON.stringify(compacted, null, 2);
+  return rendered.length <= LOCAL_MODEL_NETWORK_RESULT_MAX_CHARS
+    ? rendered
+    : compactTextForLocalModel(rendered);
 }
 
 export function preflightValidateAndRepairToolInput(opts: {
@@ -304,8 +566,16 @@ export function buildNormalizedToolResult(opts: {
   sanitizeToolResult: (toolName: string, resultText: string) => string;
   getToolFailureReason: (result: Any, fallback: string) => string;
   includeRunCommandTerminationContext?: boolean;
+  compactForLocalModel?: boolean;
 }): { toolResult: LLMToolResult; resultIsError: boolean; toolFailureReason: string } {
-  const truncatedResult = truncateToolResult(opts.rawResult);
+  const rawResultForModel = opts.compactForLocalModel
+    ? compactNetworkToolResultForLocalModel({
+        toolName: opts.toolName,
+        result: opts.result,
+        rawResult: opts.rawResult,
+      })
+    : opts.rawResult;
+  const truncatedResult = truncateToolResult(rawResultForModel);
   let sanitizedResult = opts.sanitizeToolResult(opts.toolName, truncatedResult);
 
   if (opts.includeRunCommandTerminationContext && opts.toolName === "run_command") {
@@ -756,7 +1026,11 @@ export function normalizeToolFailureReason(result: Any, fallback: string): Norma
   }
 
   if (typeof result?.terminationReason === "string" && result.terminationReason.trim()) {
-    return { message: `termination: ${result.terminationReason}` };
+    const terminationReason = result.terminationReason.trim();
+    if (terminationReason === "normal" && typeof result?.exitCode === "number" && result.exitCode !== 0) {
+      return { message: `exit code ${result.exitCode}` };
+    }
+    return { message: `termination: ${terminationReason}` };
   }
   if (typeof result?.status === "number") {
     const statusText = typeof result.statusText === "string" ? result.statusText.trim() : "";
