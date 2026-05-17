@@ -6,6 +6,7 @@ import {
   filterVerboseTimelineNoise,
   IMPORTANT_EVENT_TYPES,
   isImportantTaskEvent,
+  isLlmRequestCancelledEvent,
   shouldShowTaskEventInStepFeed,
   shouldShowTaskEventInSummaryMode,
 } from "../task-event-visibility";
@@ -248,6 +249,27 @@ describe("task event visibility helpers", () => {
     ]);
   });
 
+  it("keeps internal assistant frame directives visible in verbose mode", () => {
+    const filtered = filterVerboseTimelineNoise([
+      makeEvent(
+        "timeline_step_updated",
+        {
+          legacyType: "assistant_message",
+          message: '::frame{path="artifacts/sync-status.html" title="Sync status" kind="progress"}',
+          internal: true,
+        },
+        { id: "assistant-frame", timestamp: 1_000 },
+      ),
+      makeEvent(
+        "timeline_step_updated",
+        { legacyType: "assistant_message", message: "OK", internal: true },
+        { id: "assistant-internal", timestamp: 2_000 },
+      ),
+    ]);
+
+    expect(filtered.map((event) => event.id)).toEqual(["assistant-frame"]);
+  });
+
   it("hides timeline_step_finished events but keeps task cancellation", () => {
     const t0 = 1_000_000;
     const filtered = filterVerboseTimelineNoise([
@@ -257,6 +279,25 @@ describe("task event visibility helpers", () => {
       makeEvent("timeline_step_finished", { message: "Step finished" }, { id: "d", timestamp: t0 + 3000 }),
     ]);
     expect(filtered.map((e) => e.id)).toEqual(["c"]);
+  });
+
+  it("hides request-cancelled llm errors for cancelled tasks", () => {
+    const llmError = makeEvent(
+      "timeline_error",
+      { legacyType: "llm_error", message: "LLM API error: Request cancelled" },
+      { id: "llm-cancelled" },
+    );
+    const taskCancelled = makeEvent(
+      "timeline_step_finished",
+      { legacyType: "task_cancelled", message: "Task was stopped by user" },
+      { id: "task-cancelled" },
+    );
+
+    expect(isLlmRequestCancelledEvent(llmError)).toBe(true);
+    expect(shouldShowTaskEventInSummaryMode(llmError, "cancelled")).toBe(false);
+    expect(filterVerboseTimelineNoise([llmError, taskCancelled]).map((event) => event.id)).toEqual([
+      "task-cancelled",
+    ]);
   });
 
   it("hides low-value internal lifecycle chatter in verbose mode", () => {
