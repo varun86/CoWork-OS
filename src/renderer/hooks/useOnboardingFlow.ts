@@ -64,9 +64,9 @@ const SCRIPT = {
   confirm_assistant_traits:
     "Good. I have the shape of the role now. Let me understand who I'm working with.",
   ask_user_profile:
-    "Tell me about you. What's your name, and what kind of work or pressure fills most of your day?",
+    "And what should I call you?",
   confirm_user_profile:
-    "Perfect. That gives me enough context to stop being generic and start being useful.",
+    "Got it. I'll use that so this feels personal from the start.",
   ask_time_drains:
     "Where does your time disappear most often? Pick the things that actually drag on your day.",
   confirm_time_drains:
@@ -109,7 +109,7 @@ const SCRIPT = {
     "Great. I'll keep useful preferences and context, and you can edit or delete memory anytime.",
   confirm_memory_trust_off:
     "Understood. I'll keep memory fully off with no memory storage for now. You can enable it later in Settings > Memory.",
-  transition_setup: "Final setup step: choose the AI model that should power me.",
+  transition_setup: "Choose the AI model that should power me.",
   ollama_detected: (modelName: string) =>
     `I found ${modelName} running locally on your machine via Ollama. Want to use it?`,
   llm_intro: "This engine drives my reasoning and task execution. Pick what fits you best.",
@@ -130,6 +130,7 @@ const SCRIPT = {
     return responses[provider] || "Good choice.";
   },
   llm_need_key: "To activate this provider, paste an API key from its dashboard.",
+  chatgpt_signin: "Opening ChatGPT sign-in...",
   llm_testing: "Connecting...",
   llm_success: "Connection confirmed. I'm ready to work with context.",
   llm_error: "That didn't connect. Want to try another key?",
@@ -184,27 +185,6 @@ type RecapEditTarget =
   | "memory"
   | "model";
 
-interface OnboardingResumeSnapshot {
-  version: number;
-  updatedAt: number;
-  state: OnboardingState;
-  currentText: string;
-  greetingIndex: number;
-  showInput: boolean;
-  showProviders: boolean;
-  showApiInput: boolean;
-  showStyleImplications: boolean;
-  showPersonaOptions: boolean;
-  showVoiceOptions: boolean;
-  showOllamaDetection: boolean;
-  styleCountdown: number;
-  testResult: {
-    success: boolean;
-    error?: string;
-  } | null;
-  data: OnboardingData;
-}
-
 interface OnboardingSaveResult {
   success: boolean;
   error?: string;
@@ -234,49 +214,6 @@ const INITIAL_ONBOARDING_DATA: OnboardingData = {
 };
 
 const ONBOARDING_RESUME_KEY = "cowork:onboarding:flow:v1";
-const ONBOARDING_RESUME_VERSION = 1;
-const ONBOARDING_RESUME_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 14;
-
-const ONBOARDING_STATES: OnboardingState[] = [
-  "dormant",
-  "awakening",
-  "greeting",
-  "ask_name",
-  "confirm_name",
-  "ask_assistant_traits",
-  "confirm_assistant_traits",
-  "ask_user_profile",
-  "confirm_user_profile",
-  "ask_time_drains",
-  "confirm_time_drains",
-  "ask_priorities",
-  "confirm_priorities",
-  "ask_tools",
-  "confirm_tools",
-  "ask_response_style",
-  "confirm_response_style",
-  "ask_additional_guidance",
-  "confirm_additional_guidance",
-  "ask_voice",
-  "confirm_voice",
-  "ask_work_style",
-  "reflect_style",
-  "ask_memory_trust",
-  "confirm_memory_trust",
-  "transition_setup",
-  "ollama_detected",
-  "llm_setup",
-  "llm_api_key",
-  "llm_testing",
-  "llm_confirmed",
-  "recap",
-  "final_try",
-  "completion",
-  "transitioning",
-];
-
-const isOnboardingState = (value: unknown): value is OnboardingState =>
-  typeof value === "string" && ONBOARDING_STATES.includes(value as OnboardingState);
 
 const getFallbackTextForState = (
   state: OnboardingState,
@@ -368,93 +305,6 @@ const getRequiredUiForState = (state: OnboardingState) => ({
   showOllamaDetection: state === "ollama_detected",
 });
 
-const sanitizeOnboardingData = (value: OnboardingData): OnboardingData => ({
-  ...value,
-  apiKey: "",
-});
-
-const sanitizeResumeSnapshot = (snapshot: OnboardingResumeSnapshot): OnboardingResumeSnapshot => ({
-  ...snapshot,
-  data: sanitizeOnboardingData(snapshot.data),
-});
-
-const parseResumeSnapshot = (value: unknown): OnboardingResumeSnapshot | null => {
-  if (!value || typeof value !== "object") return null;
-
-  const candidate = value as Partial<OnboardingResumeSnapshot>;
-  if (!isOnboardingState(candidate.state)) return null;
-
-  const data = sanitizeOnboardingData({
-    ...INITIAL_ONBOARDING_DATA,
-    ...candidate.data,
-  } as OnboardingData);
-  const requiredUi = getRequiredUiForState(candidate.state);
-  const normalizedGreetingIndex = Number(candidate.greetingIndex || 0);
-  const fallbackText = getFallbackTextForState(candidate.state, data, normalizedGreetingIndex);
-  const hasText =
-    typeof candidate.currentText === "string" && candidate.currentText.trim().length > 0;
-
-  return {
-    version: Number(candidate.version || ONBOARDING_RESUME_VERSION),
-    updatedAt: Number(candidate.updatedAt || Date.now()),
-    state: candidate.state,
-    currentText: hasText ? candidate.currentText! : fallbackText,
-    greetingIndex: normalizedGreetingIndex,
-    showInput: requiredUi.showInput || !!candidate.showInput,
-    showProviders: requiredUi.showProviders || !!candidate.showProviders,
-    showApiInput: requiredUi.showApiInput || !!candidate.showApiInput,
-    showStyleImplications: !!candidate.showStyleImplications,
-    showPersonaOptions: requiredUi.showPersonaOptions || !!candidate.showPersonaOptions,
-    showVoiceOptions: requiredUi.showVoiceOptions || !!candidate.showVoiceOptions,
-    showOllamaDetection: requiredUi.showOllamaDetection || !!candidate.showOllamaDetection,
-    styleCountdown: Number(candidate.styleCountdown || 0),
-    testResult:
-      candidate.testResult && typeof candidate.testResult === "object"
-        ? {
-            success: !!candidate.testResult.success,
-            error:
-              typeof candidate.testResult.error === "string"
-                ? candidate.testResult.error
-                : undefined,
-          }
-        : null,
-    data,
-  };
-};
-
-const loadResumeSnapshot = (): OnboardingResumeSnapshot | null => {
-  if (typeof window === "undefined") return null;
-
-  try {
-    const raw = localStorage.getItem(ONBOARDING_RESUME_KEY);
-    if (!raw) return null;
-
-    const parsed = parseResumeSnapshot(JSON.parse(raw));
-    if (!parsed) return null;
-    if (parsed.version !== ONBOARDING_RESUME_VERSION) return null;
-    if (Date.now() - parsed.updatedAt > ONBOARDING_RESUME_MAX_AGE_MS) return null;
-    if (parsed.state === "dormant") {
-      localStorage.removeItem(ONBOARDING_RESUME_KEY);
-      return null;
-    }
-    if (parsed.state === "transitioning") return null;
-
-    return parsed;
-  } catch {
-    return null;
-  }
-};
-
-const persistResumeSnapshot = (snapshot: OnboardingResumeSnapshot): void => {
-  if (typeof window === "undefined") return;
-
-  try {
-    localStorage.setItem(ONBOARDING_RESUME_KEY, JSON.stringify(sanitizeResumeSnapshot(snapshot)));
-  } catch {
-    // Ignore persistence failures
-  }
-};
-
 const clearResumeSnapshot = (): void => {
   if (typeof window === "undefined") return;
 
@@ -476,11 +326,14 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
   const [showPersonaOptions, setShowPersonaOptions] = useState(false);
   const [showVoiceOptions, setShowVoiceOptions] = useState(false);
   const [showOllamaDetection, setShowOllamaDetection] = useState(false);
+  const [showIntroContinue, setShowIntroContinue] = useState(false);
   const [styleCountdown, setStyleCountdown] = useState(0);
   const [testResult, setTestResult] = useState<{
     success: boolean;
     error?: string;
   } | null>(null);
+  const [chatGptSignInLoading, setChatGptSignInLoading] = useState(false);
+  const [chatGptSignInError, setChatGptSignInError] = useState<string | null>(null);
 
   const [data, setData] = useState<OnboardingData>(INITIAL_ONBOARDING_DATA);
 
@@ -493,6 +346,7 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
     error: SCRIPT.save_error,
   }));
   const asyncMutationTokenRef = useRef(0);
+  const pendingLlmSettingsRef = useRef<Record<string, unknown> | null>(null);
 
   // Clear timeout on unmount
   useEffect(() => {
@@ -541,24 +395,15 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
     setShowPersonaOptions(false);
     setShowVoiceOptions(false);
     setShowOllamaDetection(false);
+    setShowIntroContinue(false);
     setStyleCountdown(0);
     setTestResult(null);
+    setChatGptSignInLoading(false);
+    setChatGptSignInError(null);
   }, [clearStyleCountdownInterval]);
 
-  const applyResumeState = useCallback((snapshot: OnboardingResumeSnapshot) => {
-    setState(snapshot.state);
-    setCurrentText(snapshot.currentText);
-    setGreetingIndex(snapshot.greetingIndex);
-    setShowInput(snapshot.showInput);
-    setShowProviders(snapshot.showProviders);
-    setShowApiInput(snapshot.showApiInput);
-    setShowStyleImplications(snapshot.showStyleImplications);
-    setShowPersonaOptions(snapshot.showPersonaOptions);
-    setShowVoiceOptions(snapshot.showVoiceOptions);
-    setShowOllamaDetection(snapshot.showOllamaDetection);
-    setStyleCountdown(snapshot.styleCountdown);
-    setTestResult(snapshot.testResult);
-    setData(snapshot.data);
+  const stageLlmSettings = useCallback((settings: Record<string, unknown>) => {
+    pendingLlmSettingsRef.current = settings;
   }, []);
 
   // Helper to delay state transitions
@@ -575,14 +420,10 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
 
     clearPendingTransition();
 
-    const snapshot = loadResumeSnapshot();
-    if (snapshot) {
-      applyResumeState(snapshot);
-      canPersistRef.current = true;
-      return;
-    }
+    clearResumeSnapshot();
 
     resetViewState();
+    pendingLlmSettingsRef.current = null;
     setData(INITIAL_ONBOARDING_DATA);
     setCurrentText("");
     setGreetingIndex(0);
@@ -591,7 +432,7 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
     canPersistRef.current = true;
     // Small delay before awakening
     delayedTransition("awakening", 500);
-  }, [applyResumeState, clearPendingTransition, delayedTransition, resetViewState]);
+  }, [clearPendingTransition, delayedTransition, resetViewState]);
 
   // Failsafe: never remain in dormant after onboarding has started.
   useEffect(() => {
@@ -618,23 +459,19 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
         if (greetingIndex < SCRIPT.greeting.length - 1) {
           // Show next greeting line
           timeoutRef.current = setTimeout(() => {
+            setShowIntroContinue(false);
             setGreetingIndex((i) => i + 1);
             setCurrentText(SCRIPT.greeting[greetingIndex + 1]);
           }, 800);
         } else {
-          // Move to ask name
-          timeoutRef.current = setTimeout(() => {
-            setState("ask_name");
-            setCurrentText(SCRIPT.ask_name);
-            setShowInput(true);
-          }, 1000);
+          setShowIntroContinue(true);
         }
         break;
 
       case "confirm_name":
         timeoutRef.current = setTimeout(() => {
-          setState("ask_assistant_traits");
-          setCurrentText(SCRIPT.ask_assistant_traits);
+          setState("ask_user_profile");
+          setCurrentText(SCRIPT.ask_user_profile);
         }, 1200);
         break;
 
@@ -647,8 +484,8 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
 
       case "confirm_user_profile":
         timeoutRef.current = setTimeout(() => {
-          setState("ask_time_drains");
-          setCurrentText(SCRIPT.ask_time_drains);
+          setState("transition_setup");
+          setCurrentText(SCRIPT.transition_setup);
         }, 1200);
         break;
 
@@ -819,6 +656,14 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
     setCurrentText(SCRIPT.confirm_name(trimmedName));
   }, []);
 
+  const continueFromIntro = useCallback(() => {
+    clearPendingTransition();
+    setShowIntroContinue(false);
+    setState("ask_name");
+    setCurrentText(SCRIPT.ask_name);
+    setShowInput(true);
+  }, [clearPendingTransition]);
+
   const submitAssistantTraits = useCallback((traits: OnboardingAssistantTraitId[]) => {
     const normalizedTraits =
       traits.length > 0 ? Array.from(new Set(traits)) : INITIAL_ONBOARDING_DATA.assistantTraits;
@@ -835,12 +680,6 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
     }));
     setState("confirm_assistant_traits");
     setCurrentText(SCRIPT.confirm_assistant_traits);
-
-    if (window.electronAPI?.setActivePersona) {
-      void window.electronAPI.setActivePersona(nextPersona).catch((error) => {
-        console.error("Failed to set persona during onboarding:", error);
-      });
-    }
   }, [data]);
 
   const submitUserProfile = useCallback((userName: string, userContext: string) => {
@@ -911,16 +750,6 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
     setState("confirm_voice");
     setCurrentText(enabled ? SCRIPT.confirm_voice_on : SCRIPT.confirm_voice_off);
 
-    if (enabled && window.electronAPI?.saveVoiceSettings) {
-      try {
-        await window.electronAPI.saveVoiceSettings({
-          enabled: true,
-          responseMode: "auto",
-        });
-      } catch (error) {
-        console.error("Failed to enable voice during onboarding:", error);
-      }
-    }
   }, []);
 
   // Handle work style selection
@@ -1092,6 +921,7 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
         setShowInput(false);
         setShowPersonaOptions(false);
         setShowVoiceOptions(false);
+        setShowIntroContinue(false);
         setState("greeting");
         setGreetingIndex(SCRIPT.greeting.length - 1);
         setCurrentText(SCRIPT.greeting[SCRIPT.greeting.length - 1]);
@@ -1104,8 +934,9 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
         return;
 
       case "ask_user_profile":
-        setState("ask_assistant_traits");
-        setCurrentText(SCRIPT.ask_assistant_traits);
+        setState("ask_name");
+        setCurrentText(SCRIPT.ask_name);
+        setShowInput(true);
         return;
 
       case "ask_time_drains":
@@ -1172,8 +1003,13 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
 
       case "llm_setup":
         setShowProviders(false);
-        setState("ask_memory_trust");
-        setCurrentText(SCRIPT.ask_memory_trust);
+        if (data.workStyle) {
+          setState("ask_memory_trust");
+          setCurrentText(SCRIPT.ask_memory_trust);
+        } else {
+          setState("ask_user_profile");
+          setCurrentText(SCRIPT.ask_user_profile);
+        }
         return;
 
       case "llm_api_key":
@@ -1294,6 +1130,9 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
       if (existingSettings.providerType === provider && existingSettings.modelKey?.trim()) {
         return existingSettings.modelKey;
       }
+      if (provider === "openai" && existingSettings.openai?.authMethod === "oauth") {
+        return "gpt-5.5";
+      }
       if (provider === "ollama" && data.detectedOllamaModel) {
         return data.detectedOllamaModel;
       }
@@ -1314,8 +1153,9 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
         case "openai":
           return !!(
             existingSettings.openai?.apiKey ||
-            existingSettings.openai?.accessToken ||
-            existingSettings.openai?.refreshToken
+            (existingSettings.openai?.authMethod === "oauth" &&
+              existingSettings.openai?.accessToken &&
+              existingSettings.openai?.refreshToken)
           );
         case "gemini":
           return !!existingSettings.gemini?.apiKey;
@@ -1506,24 +1346,12 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
           setTestResult(null);
 
           const settings = buildSaveSettings(provider, "", existingSettings);
-          try {
-            if (!isActiveAsyncMutation(mutationToken)) {
-              return;
-            }
-            await window.electronAPI.saveLLMSettings(settings);
-            if (!isActiveAsyncMutation(mutationToken)) {
-              return;
-            }
-            setState("llm_confirmed");
-            setCurrentText(SCRIPT.llm_success);
-          } catch {
-            if (!isActiveAsyncMutation(mutationToken)) {
-              return;
-            }
-            // Even if save fails, proceed to recap
-            setState("recap");
-            setCurrentText(SCRIPT.recap_intro(data.assistantName));
+          if (!isActiveAsyncMutation(mutationToken)) {
+            return;
           }
+          stageLlmSettings(settings);
+          setState("llm_confirmed");
+          setCurrentText(SCRIPT.llm_success);
         } else {
           setState("llm_api_key");
           setCurrentText(SCRIPT.llm_need_key);
@@ -1535,10 +1363,10 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
       beginAsyncMutation,
       buildSaveSettings,
       clearPendingTransition,
-      data.assistantName,
       isActiveAsyncMutation,
       loadExistingLlmSettings,
       providerHasSavedCredentials,
+      stageLlmSettings,
     ],
   );
 
@@ -1575,10 +1403,7 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
           if (!isActiveAsyncMutation(mutationToken)) {
             return;
           }
-          await window.electronAPI.saveLLMSettings(saveSettings);
-          if (!isActiveAsyncMutation(mutationToken)) {
-            return;
-          }
+          stageLlmSettings(saveSettings);
 
           setTestResult({ success: true });
           setState("llm_confirmed");
@@ -1611,8 +1436,85 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
       data.selectedProvider,
       isActiveAsyncMutation,
       loadExistingLlmSettings,
+      stageLlmSettings,
     ],
   );
+
+  const signInWithChatGPT = useCallback(async () => {
+    clearPendingTransition();
+    const mutationToken = beginAsyncMutation();
+    setShowProviders(false);
+    setShowApiInput(false);
+    setTestResult(null);
+    setChatGptSignInError(null);
+    setChatGptSignInLoading(true);
+    setState("llm_testing");
+    setCurrentText(SCRIPT.chatgpt_signin);
+
+    try {
+      const result = await window.electronAPI.openaiOAuthStart({ persist: false });
+      if (!isActiveAsyncMutation(mutationToken)) return;
+
+      if (!result?.success) {
+        const error = result?.error || "ChatGPT sign-in failed";
+        setChatGptSignInError(error);
+        setTestResult({ success: false, error });
+        setState("llm_setup");
+        setCurrentText(SCRIPT.llm_intro);
+        setShowProviders(true);
+        return;
+      }
+
+      const existingSettings = await loadExistingLlmSettings();
+      if (!isActiveAsyncMutation(mutationToken)) return;
+      if (!result.tokens) {
+        throw new Error("ChatGPT sign-in completed without onboarding credentials");
+      }
+
+      const modelKey = existingSettings?.openai?.model || "gpt-5.5";
+      const settings = buildSaveSettings("openai", "", {
+        ...existingSettings,
+        providerType: "openai",
+        modelKey,
+        openai: {
+          ...existingSettings?.openai,
+          accessToken: result.tokens?.accessToken,
+          refreshToken: result.tokens?.refreshToken,
+          tokenExpiresAt: result.tokens?.tokenExpiresAt,
+          accountId: result.tokens?.accountId,
+          email: result.tokens?.email,
+          authMethod: "oauth",
+          apiKey: undefined,
+          model: modelKey,
+        },
+      });
+      stageLlmSettings(settings);
+
+      setData((d) => ({ ...d, selectedProvider: "openai" }));
+      setTestResult({ success: true });
+      setState("llm_confirmed");
+      setCurrentText(SCRIPT.llm_success);
+    } catch (error) {
+      if (!isActiveAsyncMutation(mutationToken)) return;
+      const message = error instanceof Error ? error.message : "ChatGPT sign-in failed";
+      setChatGptSignInError(message);
+      setTestResult({ success: false, error: message });
+      setState("llm_setup");
+      setCurrentText(SCRIPT.llm_intro);
+      setShowProviders(true);
+    } finally {
+      if (isActiveAsyncMutation(mutationToken)) {
+        setChatGptSignInLoading(false);
+      }
+    }
+  }, [
+    beginAsyncMutation,
+    buildSaveSettings,
+    clearPendingTransition,
+    isActiveAsyncMutation,
+    loadExistingLlmSettings,
+    stageLlmSettings,
+  ]);
 
   // Accept auto-detected Ollama provider
   const acceptOllamaDetection = useCallback(async () => {
@@ -1640,32 +1542,21 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
           model: modelName,
         },
       });
-      try {
-        if (!isActiveAsyncMutation(mutationToken)) {
-          return;
-        }
-        await window.electronAPI.saveLLMSettings(settings);
-        if (!isActiveAsyncMutation(mutationToken)) {
-          return;
-        }
-        setState("llm_confirmed");
-        setCurrentText(SCRIPT.llm_success);
-      } catch {
-        if (!isActiveAsyncMutation(mutationToken)) {
-          return;
-        }
-        setState("recap");
-        setCurrentText(SCRIPT.recap_intro(data.assistantName));
+      if (!isActiveAsyncMutation(mutationToken)) {
+        return;
       }
+      stageLlmSettings(settings);
+      setState("llm_confirmed");
+      setCurrentText(SCRIPT.llm_success);
     }, 1500);
   }, [
     beginAsyncMutation,
     buildSaveSettings,
     clearPendingTransition,
     data.detectedOllamaModel,
-    data.assistantName,
     isActiveAsyncMutation,
     loadExistingLlmSettings,
+    stageLlmSettings,
   ]);
 
   // Decline auto-detected Ollama — show normal provider picker
@@ -1678,8 +1569,7 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
     setShowProviders(true);
   }, [clearPendingTransition, invalidateAsyncMutations]);
 
-  // Skip LLM setup — default to OpenRouter with a free model so the app
-  // has a provider pre-selected and users aren't pointed at paid-only services.
+  // Skip LLM setup means explore-only unless a previously configured provider exists.
   const skipLLMSetup = useCallback(async () => {
     clearPendingTransition();
     const mutationToken = beginAsyncMutation();
@@ -1692,28 +1582,15 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
       return;
     }
 
-    const fallbackProvider: LLMProviderType =
-      existingSettings?.providerType || "openrouter";
-    const fallbackSettings =
-      existingSettings?.providerType
-        ? buildSaveSettings(fallbackProvider, "", existingSettings)
-        : buildSaveSettings("openrouter", "", {
-            ...existingSettings,
-            providerType: "openrouter",
-            modelKey: getDefaultModel("openrouter"),
-            openrouter: {
-              ...existingSettings?.openrouter,
-              model: getDefaultModel("openrouter"),
-            },
-          });
-    try {
-      await window.electronAPI.saveLLMSettings(fallbackSettings);
-    } catch {
-      // Continue through onboarding recap even if the fallback save fails.
-    }
+    const fallbackProvider =
+      existingSettings?.providerType &&
+      providerHasSavedCredentials(existingSettings.providerType, existingSettings)
+        ? existingSettings.providerType
+        : null;
     if (!isActiveAsyncMutation(mutationToken)) {
       return;
     }
+    pendingLlmSettingsRef.current = null;
 
     setData((d) => ({
       ...d,
@@ -1725,12 +1602,11 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
     setCurrentText(SCRIPT.recap_intro(data.assistantName));
   }, [
     beginAsyncMutation,
-    buildSaveSettings,
     clearPendingTransition,
     data.assistantName,
-    getDefaultModel,
     isActiveAsyncMutation,
     loadExistingLlmSettings,
+    providerHasSavedCredentials,
   ]);
 
   // Save onboarding choices to settings
@@ -1767,6 +1643,12 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
           enabled: data.voiceEnabled,
           responseMode: "auto",
         });
+      }
+
+      const pendingLlmSettings = pendingLlmSettingsRef.current;
+      if (pendingLlmSettings) {
+        await window.electronAPI.saveLLMSettings(pendingLlmSettings);
+        pendingLlmSettingsRef.current = null;
       }
 
       if (
@@ -1856,54 +1738,16 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
     saveOnboardingSettingsRef.current = saveOnboardingSettings;
   }, [saveOnboardingSettings]);
 
-  // Persist resumable onboarding state
+  // Onboarding answers stay in memory until final completion; clear older persisted drafts.
   useEffect(() => {
     if (!canPersistRef.current) return;
 
-    if (state === "transitioning") {
+    if (state === "dormant" || state === "transitioning") {
       clearResumeSnapshot();
-      return;
     }
+  }, [state]);
 
-    const snapshot: OnboardingResumeSnapshot = {
-      version: ONBOARDING_RESUME_VERSION,
-      updatedAt: Date.now(),
-      state,
-      currentText,
-      greetingIndex,
-      showInput,
-      showProviders,
-      showApiInput,
-      showStyleImplications,
-      showPersonaOptions,
-      showVoiceOptions,
-      showOllamaDetection,
-      styleCountdown,
-      testResult,
-      data: {
-        ...data,
-        apiKey: "",
-      },
-    };
-
-    persistResumeSnapshot(snapshot);
-  }, [
-    state,
-    currentText,
-    greetingIndex,
-    showInput,
-    showProviders,
-    showApiInput,
-    showStyleImplications,
-    showPersonaOptions,
-    showVoiceOptions,
-    showOllamaDetection,
-    styleCountdown,
-    testResult,
-    data,
-  ]);
-
-  // Resume style countdown reliably when restoring onboarding mid-step.
+  // Keep the style countdown moving while the implication panel is visible.
   useEffect(() => {
     if (state !== "reflect_style" || !showStyleImplications || styleCountdown <= 0) {
       clearStyleCountdownInterval();
@@ -1928,7 +1772,7 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
     }, 1000);
   }, [clearStyleCountdownInterval, showStyleImplications, state, styleCountdown]);
 
-  // Self-heal stale resume snapshots that may miss required text or step UI flags.
+  // Ensure the current step always has its required text and input controls.
   useEffect(() => {
     if (state === "dormant" || state === "transitioning") return;
 
@@ -1980,14 +1824,18 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
     showPersonaOptions,
     showVoiceOptions,
     showOllamaDetection,
+    showIntroContinue,
     styleCountdown,
     testResult,
+    chatGptSignInLoading,
+    chatGptSignInError,
     data,
 
     // Actions
     start,
     onAwakeningComplete,
     onTextComplete,
+    continueFromIntro,
     submitName,
     submitAssistantTraits,
     submitUserProfile,
@@ -2010,6 +1858,7 @@ export function useOnboardingFlow({ onComplete, workspaceId }: UseOnboardingOpti
     goBack,
     selectProvider,
     submitApiKey,
+    signInWithChatGPT,
     skipLLMSetup,
     acceptOllamaDetection,
     declineOllamaDetection,
