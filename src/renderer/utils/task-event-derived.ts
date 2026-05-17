@@ -18,6 +18,7 @@ import {
 import { hasAssistantMediaDirective } from "./assistant-media-directives";
 import {
   filterVerboseTimelineNoise,
+  isLlmRequestCancelledEvent,
   shouldShowTaskEventInSummaryMode,
 } from "./task-event-visibility";
 import { getEffectiveTaskEventType } from "./task-event-compat";
@@ -788,6 +789,11 @@ export function deriveSharedTaskEventUiState(
       : candidateEvents;
 
   for (const event of projectedEvents) {
+    if (params.task?.status === "cancelled" && isLlmRequestCancelledEvent(event)) {
+      debugOnlyEvents.push(event);
+      continue;
+    }
+
     const forceLive =
       projectionMode === "live" &&
       LIVE_PROJECTION_FORCE_VISIBLE_TYPES.has(getEffectiveTaskEventType(event));
