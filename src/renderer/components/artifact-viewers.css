@@ -1477,6 +1477,7 @@
 }
 
 .document-viewer-html,
+.document-viewer-markdown,
 .document-viewer-text {
   max-width: 760px;
   margin: 0 auto;
@@ -1484,6 +1485,14 @@
   color: #111827;
   font-size: 15px;
   line-height: 1.65;
+}
+
+.document-viewer-markdown > :first-child {
+  margin-top: 0;
+}
+
+.document-viewer-markdown > :last-child {
+  margin-bottom: 0;
 }
 
 .document-viewer-text {
@@ -1608,4 +1617,3 @@
     width: calc(100% - 32px);
   }
 }
-
