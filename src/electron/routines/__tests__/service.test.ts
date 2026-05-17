@@ -159,4 +159,157 @@ describeWithSqlite("RoutineService", () => {
     expect(hooksSettings.mappings).toHaveLength(0);
     expect(eventTriggerService.listTriggers()).toHaveLength(0);
   });
+
+  it("refreshes a manual run without creating duplicate run rows", async () => {
+    let now = 1_779_000_000_000;
+    routineService = new RoutineServiceCtor({
+      db,
+      getCronService: () => cronService as Any,
+      getEventTriggerService: () => eventTriggerService,
+      loadHooksSettings: () => hooksSettings,
+      saveHooksSettings: (settings) => {
+        hooksSettings = settings;
+      },
+      createTask: vi.fn().mockResolvedValue({ id: "task-1" }),
+      getTaskSnapshot: vi.fn().mockReturnValue({
+        status: "failed",
+        terminalStatus: "failed",
+        error: "Task missing verification evidence",
+        completedAt: now + 100,
+      }),
+      now: () => now++,
+    });
+
+    const routine = await routineService.create({
+      name: "Build Health",
+      enabled: true,
+      workspaceId: "ws-1",
+      prompt: "Check build health.",
+      connectors: [],
+      triggers: [{ id: "manual-1", type: "manual", enabled: true }],
+    });
+
+    await routineService.runNow(routine.id);
+    await routineService.listRuns(routine.id, 10);
+    await routineService.listRuns(routine.id, 10);
+
+    const rowCount = db
+      .prepare("SELECT COUNT(*) AS count FROM routine_runs WHERE routine_id = ?")
+      .get(routine.id) as { count: number };
+    const runs = await routineService.listRuns(routine.id, 10);
+
+    expect(rowCount.count).toBe(1);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.status).toBe("failed");
+    expect(runs[0]?.backingTaskId).toBe("task-1");
+  });
+
+  it("refreshes a task-backed routine run when the backing task finishes", async () => {
+    let taskStatus = "executing";
+    const getTaskSnapshot = vi.fn(() => ({
+      status: taskStatus,
+      terminalStatus: taskStatus === "completed" ? "ok" : undefined,
+      resultSummary: taskStatus === "completed" ? "Build checks passed." : undefined,
+      completedAt: taskStatus === "completed" ? 1_779_000_000_100 : undefined,
+    }));
+    routineService = new RoutineServiceCtor({
+      db,
+      getCronService: () => cronService as Any,
+      getEventTriggerService: () => eventTriggerService,
+      loadHooksSettings: () => hooksSettings,
+      saveHooksSettings: (settings) => {
+        hooksSettings = settings;
+      },
+      createTask: vi.fn().mockResolvedValue({ id: "task-1" }),
+      getTaskSnapshot,
+      now: () => 1_779_000_000_000,
+    });
+
+    const routine = await routineService.create({
+      name: "Build Health",
+      enabled: true,
+      workspaceId: "ws-1",
+      prompt: "Check build health.",
+      connectors: [],
+      triggers: [{ id: "manual-1", type: "manual", enabled: true }],
+    });
+    await routineService.runNow(routine.id);
+
+    taskStatus = "completed";
+    await routineService.refreshRunsForTask("task-1");
+
+    const runs = await routineService.listRuns(routine.id, 10);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.status).toBe("completed");
+    expect(runs[0]?.finishedAt).toBe(1_779_000_000_100);
+    expect(runs[0]?.artifactsSummary).toBe("Build checks passed.");
+  });
+
+  it("collapses historical duplicate run rows that point at the same backing task", async () => {
+    const routine = await routineService.create({
+      name: "Build Health",
+      enabled: true,
+      workspaceId: "ws-1",
+      prompt: "Check build health.",
+      connectors: [],
+      triggers: [{ id: "manual-1", type: "manual", enabled: true }],
+    });
+
+    const base = 1_779_000_000_000;
+    db.prepare(
+      `INSERT INTO routine_runs
+       (id, routine_id, trigger_id, trigger_type, status, started_at, finished_at,
+        source_event_summary, backing_task_id, backing_managed_session_id, output_status,
+        error_summary, artifacts_summary, run_key, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      "run-1",
+      routine.id,
+      "manual-1",
+      "manual",
+      "running",
+      base,
+      null,
+      "Manual run",
+      "task-1",
+      null,
+      "none",
+      null,
+      null,
+      null,
+      base,
+      base,
+    );
+    db.prepare(
+      `INSERT INTO routine_runs
+       (id, routine_id, trigger_id, trigger_type, status, started_at, finished_at,
+        source_event_summary, backing_task_id, backing_managed_session_id, output_status,
+        error_summary, artifacts_summary, run_key, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      "run-2",
+      routine.id,
+      "manual-1",
+      "manual",
+      "failed",
+      base,
+      base + 1,
+      "Manual run",
+      "task-1",
+      null,
+      "failed",
+      "Task missing verification evidence",
+      null,
+      null,
+      base + 1,
+      base + 1,
+    );
+
+    const runs = await routineService.listRuns(routine.id, 10);
+
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.id).toBe("run-2");
+    expect(runs[0]?.status).toBe("failed");
+    expect(runs[0]?.errorSummary).toBe("Task missing verification evidence");
+  });
 });
