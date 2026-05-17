@@ -1,6 +1,6 @@
 # Managed Agents
 
-Managed Agents adds a first-class managed resource model to CoWork without replacing the existing task runtime.
+Managed Agents adds a first-class, GUI-first managed resource model to CoWork without replacing the existing task runtime. It is one of the core reasons CoWork OS is positioned as a personal AI super app and everything app rather than a terminal-only agent runner: users can create reusable agents, spawn work from templates or prompts, inspect configuration, run tests, and monitor execution from visual surfaces.
 
 V1 introduces three control-plane resources:
 
@@ -8,7 +8,7 @@ V1 introduces three control-plane resources:
 - `ManagedEnvironment`: reusable local execution template
 - `ManagedSession`: durable run resource that owns lifecycle, event history, and resume semantics
 
-The implementation is local-first and additive. Managed resources are exposed through the control plane, while existing `Task`, `AgentTeamRun`, `task_events`, and `session_runtime_v2` remain the execution primitives underneath.
+The implementation is local-first and additive. Managed resources are exposed through the control plane and Agents Hub, while existing `Task`, `AgentTeamRun`, `task_events`, and `session_runtime_v2` remain the execution primitives underneath.
 
 <p align="center">
   <img src="../resources/branding/images/cowork-os-3.webp" alt="Agents Hub" width="700">
@@ -17,7 +17,9 @@ The implementation is local-first and additive. Managed resources are exposed th
 
 ## Why This Exists
 
-CoWork already had the low-level pieces for durable execution, team runs, worktree isolation, MCP integration, and resumable task runtime state. Managed Agents packages those pieces into reusable definitions and a stable run identity so UI and backend surfaces can reason about durable agent runs directly instead of reconstructing them from ad hoc task metadata.
+CoWork already had the low-level pieces for durable execution, team runs, worktree isolation, MCP integration, and resumable task runtime state. Managed Agents packages those pieces into reusable definitions and a stable run identity so GUI and backend surfaces can reason about durable agent runs directly instead of reconstructing them from ad hoc task metadata.
+
+The product goal is that a user can manage many agents visually: create or generate agents, inspect tools and skills, launch tests, spawn starter prompts, watch child tasks, review approvals, and hand work into Mission Control without switching to a CLI workflow.
 
 The model is:
 
