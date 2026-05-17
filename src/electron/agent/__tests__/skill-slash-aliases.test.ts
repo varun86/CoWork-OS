@@ -94,6 +94,24 @@ describe("resolveSkillSlashAlias", () => {
     expect(resolveSkillSlashAlias("review")).toBe("review");
   });
 
+  it("ignores aliases from disabled packs", () => {
+    mocks.getSkill.mockImplementation((id: string) =>
+      id === "plan-payroll" ? { id, enabled: true } : undefined,
+    );
+    mocks.getPluginsByType.mockReturnValue([
+      {
+        state: "disabled",
+        manifest: {
+          name: "smb-complete",
+          slashCommands: [{ name: "plan-payroll", skillId: "smb-plan-payroll" }],
+          skills: [{ id: "smb-plan-payroll", enabled: true }],
+        },
+      },
+    ]);
+
+    expect(resolveSkillSlashAlias("/plan-payroll")).toBe("plan-payroll");
+  });
+
   it("ignores invalid slash command tokens", () => {
     mocks.getSkill.mockReturnValue({ id: "bad token", enabled: true });
 
