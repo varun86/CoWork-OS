@@ -1118,6 +1118,11 @@
   color: var(--color-accent);
 }
 
+.mc-v2-agent-chip:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
 .mc-v2-feed-list {
   flex: 1;
   overflow-y: auto;
