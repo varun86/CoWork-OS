@@ -2,7 +2,12 @@
 
 CoWork OS is **free and open source**. To run tasks, configure your own model credentials or use local models.
 
-> **Zero-config start**: CoWork OS ships with [OpenRouter](https://openrouter.ai) selected as the default provider using its free model router (`openrouter/free`), which automatically picks from available free models. You can start using the app immediately without any API keys. To unlock the full range of models, create a free OpenRouter account at [openrouter.ai/keys](https://openrouter.ai/keys) (no credit card required) and paste the key in **Settings > LLM**. You can switch to any other provider at any time.
+> **First-run recommendation**: Start with **Sign in with ChatGPT** if you already have a ChatGPT subscription, or use a detected local Ollama model if one is installed. API-key providers, including OpenRouter, Claude, Gemini, Groq, and OpenAI API, are available in **Settings > LLM**. The onboarding provider picker marks OpenRouter, Gemini, and Groq with **Free** where a free usage path is available. You can explore the app without AI, but running tasks requires one connected and tested model route.
+
+<p align="center">
+  <img src="../resources/branding/images/cowork-os-10.webp" alt="LLM provider settings" width="700">
+  <br><em>Provider settings centralize built-in models, compatible gateways, authentication, and fallback routing.</em>
+</p>
 
 ## Built-in Providers
 
@@ -10,8 +15,8 @@ CoWork OS is **free and open source**. To run tasks, configure your own model cr
 |----------|---------------|---------|
 | Claude | Claude API key or Claude subscription token in Settings | API: pay-per-token; subscription: uses your Claude account |
 | Azure Anthropic | API key + endpoint + deployment in Settings | Pay-per-token via Azure |
-| Google Gemini | API key in Settings | Pay-per-token (free tier available) |
-| OpenRouter | API key in Settings (default provider) | Free tier available, pay-per-token for premium models |
+| Google Gemini | API key in Settings | Free usage available through Google AI Studio subject to Google's current limits; pay-per-token beyond free limits |
+| OpenRouter | API key in Settings (default provider) | Free model options available; pay-per-token for premium models |
 | DeepSeek | API key in Settings | Provider billing |
 | OpenAI (API Key) | API key in Settings | Pay-per-token |
 | OpenAI (ChatGPT OAuth) | Sign in with ChatGPT account | Uses your ChatGPT subscription |
@@ -19,8 +24,9 @@ CoWork OS is **free and open source**. To run tasks, configure your own model cr
 | Azure OpenAI | API key + endpoint in Settings | Pay-per-token via Azure |
 | Ollama (Local) | Install Ollama and pull models | **Free** (runs locally) |
 | HuggingFace Local AI | Install `hf-agents` and run `llama.cpp` locally | **Free** (runs locally) |
-| Groq | API key in Settings | Pay-per-token |
-| xAI (Grok) | API key in Settings | Pay-per-token |
+| Groq | API key in Settings | Free usage available subject to Groq's current limits; pay-per-token beyond free limits |
+| xAI (Grok API) | API key in Settings | Pay-per-token |
+| xAI Grok OAuth (SuperGrok Subscription) | Browser sign-in in Settings | Uses your active SuperGrok subscription |
 | Kimi (Moonshot) | API key in Settings | Pay-per-token |
 | Pi (Multi-LLM) | Unified API via pi-ai | Routes to multiple providers |
 
@@ -305,6 +311,57 @@ For prompt caching, OpenRouter Claude routes use explicit Anthropic-style cache 
 
 - **Option 1: API Key** — Standard pay-per-token access to GPT models
 - **Option 2: ChatGPT OAuth** — Sign in with your ChatGPT subscription
+
+---
+
+## xAI / Grok
+
+CoWork OS supports Grok through either direct xAI API billing or a browser OAuth login that uses your active SuperGrok subscription.
+
+### Option 1: SuperGrok Subscription
+
+Use this when you already have a Grok/SuperGrok subscription and do not want to manage an `XAI_API_KEY`.
+
+1. Open **Settings** > **LLM**.
+2. Select **Grok OAuth** or open the **xAI** provider panel and choose **SuperGrok Subscription**.
+3. Click **Sign in with Grok**.
+4. Complete the xAI browser sign-in and consent flow.
+5. Keep the default model `grok-4.3`, or select another listed Grok chat model.
+6. Click **Test Connection**, then save settings.
+
+CoWork stores the OAuth tokens in encrypted LLM settings for the current profile and refreshes the access token before model calls. Logging out from the same panel clears the stored xAI OAuth tokens without removing an xAI API key.
+
+### Option 2: xAI API Key
+
+Use this when you want pay-per-token API billing through the xAI developer console.
+
+1. Create or copy an API key from [xAI Console](https://console.x.ai/).
+2. Open **Settings** > **LLM** and select **xAI API Key**.
+3. Paste the key, click **Refresh Models**, choose a model, then save.
+
+### Models
+
+The built-in Grok catalog is pinned to the current SuperGrok OAuth chat models:
+
+| Model ID | Notes |
+|----------|-------|
+| `grok-4.3` | Default OAuth model for chat and reasoning |
+| `grok-4.20-0309-reasoning` | Reasoning variant |
+| `grok-4.20-0309-non-reasoning` | Non-reasoning variant |
+| `grok-4.20-multi-agent-0309` | Multi-agent variant |
+
+### Transport and endpoint
+
+The OAuth route uses xAI's Responses-style endpoint at `https://api.x.ai/v1`, matching the Hermes Agent `xai-oauth` provider shape. The direct API-key route continues to use the OpenAI-compatible xAI API path. The **Base URL** field can override the endpoint for either mode when xAI changes deployment requirements or when testing a compatible gateway.
+
+### Troubleshooting
+
+- If the browser sign-in times out, start **Sign in with Grok** again. The loopback authorization window is intentionally finite.
+- If the callback port is busy, CoWork falls back to an ephemeral local port automatically.
+- If token refresh fails because the xAI session was revoked, disconnect the Grok account in Settings and sign in again.
+- If a model call fails with a subscription or entitlement error, confirm the signed-in xAI account has an active SuperGrok subscription.
+
+References: [xAI Grok + Hermes announcement](https://x.ai/news/grok-hermes) and [Hermes xAI Grok OAuth docs](https://hermes-agent.nousresearch.com/docs/guides/xai-grok-oauth).
 
 ---
 
