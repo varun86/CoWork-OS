@@ -183,6 +183,7 @@ Implementation contract:
 - `Worktree` should remain disabled until the cron creation payload can preserve a task worktree execution context.
 - Saved prompts should include a source task title, task ID, and `cowork://tasks/<taskId>` deeplink so future runs remain traceable.
 - Template selection should fill name, prompt, and schedule only; templates are not routines or managed agents.
+- Scheduled-task observability belongs in `src/renderer/components/ScheduledTasksSettings.tsx`: use `listCronJobs`, `getCronRunHistory`, and `clearCronRunHistory` for run health, latest result, delivery status, and per-run task links. Do not duplicate scheduler history in the task automation modal.
 
 Focused helpers exported from `MainContent.tsx` for tests:
 
