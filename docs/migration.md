@@ -88,7 +88,7 @@ Moving to CoWork OS provides several advantages:
 
 | Feature | Benefit |
 |---------|---------|
-| **30+ LLM providers** | Built-in + compatible gateways with BYOK flexibility, including OpenRouter Pareto Code routing |
+| **35 LLM provider options** | Built-in + compatible gateways with BYOK and supported subscription flexibility, including OpenRouter Pareto Code routing and Grok through xAI API key or SuperGrok OAuth |
 | **Local LLM support** | Run completely free and offline with Ollama |
 | **Native desktop app** | Full desktop UX on macOS and Windows (menu bar on macOS, system tray on Windows) |
 | **Real-time timeline** | See exactly what the agent is doing |
@@ -139,7 +139,7 @@ npm run dev
 4. Test connection
 5. Save
 
-Available providers include Anthropic, OpenAI, Gemini, OpenRouter, Bedrock, Ollama, Groq, xAI (Grok), Kimi, plus compatible gateways such as OpenCode Zen, Google Vertex, Google Antigravity, Google Gemini CLI, Z.AI, GLM, Vercel AI Gateway, Cerebras, Mistral, GitHub Copilot, Qwen Portal, MiniMax, Xiaomi MiMo, Venice AI, Synthetic, Kimi Code, and custom OpenAI- or Anthropic-compatible endpoints. OpenRouter model selection includes `openrouter/pareto-code` and `openrouter/pareto-code:nitro` for coding-score-based model routing.
+Available providers include Anthropic, OpenAI, Gemini, OpenRouter, Bedrock, Ollama, Groq, xAI/Grok through either API key or SuperGrok browser OAuth, Kimi, plus compatible gateways such as OpenCode Zen, Google Vertex, Google Antigravity, Google Gemini CLI, Z.AI, GLM, Vercel AI Gateway, Cerebras, Mistral, GitHub Copilot, Qwen Portal, MiniMax, Xiaomi MiMo, Venice AI, Synthetic, Kimi Code, and custom OpenAI- or Anthropic-compatible endpoints. OpenRouter model selection includes `openrouter/pareto-code` and `openrouter/pareto-code:nitro` for coding-score-based model routing.
 
 ### 3. Set Up Messaging Channels
 
