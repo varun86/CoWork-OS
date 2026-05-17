@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback, Fragment, useDeferredValue } from "react";
-import { ChevronDown, ChevronRight, SlidersHorizontal, EyeOff, AppWindow, Bell, HardDrive, Rows3, Search, Server, Workflow, HeartPulse, Lightbulb, Inbox, Users, UsersRound, ListFilter, EllipsisVertical, Shapes, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, SlidersHorizontal, EyeOff, AppWindow, Bell, HardDrive, Rows3, Search, Server, Workflow, HeartPulse, Lightbulb, Inbox, Users, UsersRound, ListFilter, EllipsisVertical, Shapes, Plus, Sparkles } from "lucide-react";
 import { resolveTwinIcon } from "../utils/twin-icons";
 import { stripAllEmojis } from "../utils/emoji-replacer";
 import { Task, Workspace, UiDensity, InfraStatus, UpdateInfo } from "../../shared/types";
@@ -8,6 +8,7 @@ import { isAutomatedTaskLike } from "../../shared/automated-task-detection";
 import { VirtualList } from "./VirtualList";
 import { isPretextEnabled } from "../utils/pretext-adapter";
 import { capitalizeSidebarSessionTitle } from "../utils/sidebar-title";
+import { deriveSlashCommandTaskTitle } from "../utils/slash-command-title";
 
 const SIDEBAR_ITEM_HEIGHT = 26;
 const SIDEBAR_LOAD_MORE_THRESHOLD_PX = 320;
@@ -44,6 +45,7 @@ interface SidebarProps {
   isIdeasActive?: boolean;
   isInboxAgentActive?: boolean;
   isAgentsActive?: boolean;
+  isEverydayAgentActive?: boolean;
   isMissionControlActive?: boolean;
   isHealthActive?: boolean;
   isLoadingSessions?: boolean;
@@ -53,6 +55,7 @@ interface SidebarProps {
   onOpenIdeas?: () => void;
   onOpenInboxAgent?: () => void;
   onOpenAgents?: () => void;
+  onOpenEverydayAgent?: () => void;
   onOpenHealth?: () => void;
   onNewSession?: () => void;
   onOpenSettings: () => void;
@@ -239,8 +242,11 @@ export interface TaskTreeNode {
 }
 
 const GENERIC_SESSION_TITLES = new Set([
+  "...",
   "new session",
   "new task",
+  "run",
+  "run...",
   "untitled",
   "untitled session",
   "untitled task",
@@ -251,7 +257,8 @@ function normalizeSidebarTitleCandidate(value?: string | null): string {
   const trimmed = value.trim();
   if (!trimmed) return "";
   const userRequestMatch = trimmed.match(/(?:^|\n)User request:\s*([\s\S]+)/i);
-  return (userRequestMatch?.[1] || trimmed).replace(/\s+/g, " ").trim();
+  const candidate = (userRequestMatch?.[1] || trimmed).replace(/\s+/g, " ").trim();
+  return deriveSlashCommandTaskTitle(candidate) || candidate;
 }
 
 function isGenericSidebarTitle(value: string): boolean {
@@ -489,6 +496,7 @@ export function Sidebar({
   isIdeasActive = false,
   isInboxAgentActive = false,
   isAgentsActive = false,
+  isEverydayAgentActive = false,
   isMissionControlActive = false,
   isHealthActive = false,
   isLoadingSessions = false,
@@ -498,6 +506,7 @@ export function Sidebar({
   onOpenIdeas,
   onOpenInboxAgent,
   onOpenAgents,
+  onOpenEverydayAgent,
   onOpenHealth,
   onNewSession,
   onOpenSettings,
@@ -1785,6 +1794,24 @@ export function Sidebar({
                   <Workflow size={16} strokeWidth={2} style={{ display: 'block' }} />
                 </span>
                 <span>Automations</span>
+              </span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className={`new-task-btn cli-new-task-btn cli-action-btn sidebar-home-btn sidebar-nav-item ${isEverydayAgentActive ? "active" : ""}`}
+            onClick={onOpenEverydayAgent}
+            aria-pressed={isEverydayAgentActive}
+            title="Everyday Agent"
+          >
+            <span className="cli-btn-text">
+              <span className="terminal-only">everyday_agent</span>
+              <span className="modern-only cli-new-task-modern-label">
+                <span className="sidebar-home-btn-icon" aria-hidden="true" style={{ display: "flex" }}>
+                  <Sparkles size={16} strokeWidth={2} style={{ display: "block" }} />
+                </span>
+                <span>Everyday</span>
               </span>
             </span>
           </button>
