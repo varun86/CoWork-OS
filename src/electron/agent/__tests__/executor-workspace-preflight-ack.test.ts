@@ -270,6 +270,38 @@ describe("TaskExecutor workspace preflight acknowledgement", () => {
     expect(reason).toBeNull();
   });
 
+  it("treats remote GitHub README fetch steps as analysis-only", () => {
+    const fakeThis: Any = Object.create((TaskExecutor as Any).prototype);
+    fakeThis.workspace = { path: process.cwd() };
+    fakeThis.task = {
+      id: "t-readme-fetch",
+      title: "",
+      prompt: "Research and compare two GitHub repositories.",
+      rawPrompt: "Research and compare two GitHub repositories.",
+    };
+    fakeThis.agentPolicyConfig = null;
+    const step = {
+      id: "s-readme-fetch",
+      description:
+        '**Identity & Source Verification:** Search for "Hermes Agent" and "OpenClaw" to pin down the exact GitHub repositories. Fetch their `README.md` and stats pages (stars, forks, contributors, latest release, age).',
+      kind: "primary",
+      status: "pending",
+    };
+    fakeThis.plan = { steps: [step] };
+
+    const contract = (TaskExecutor as Any).prototype.resolveStepExecutionContract.call(fakeThis, step);
+    const reason = (TaskExecutor as Any).prototype.getMissingWorkspaceArtifactPreflightReason.call(
+      fakeThis,
+      step,
+      contract.verificationPathDecisions,
+    );
+
+    expect(contract.mode).toBe("analysis_only");
+    expect(contract.requiresArtifactEvidence).toBe(false);
+    expect(Array.from(contract.requiredTools)).not.toContain("write_file");
+    expect(reason).toBeNull();
+  });
+
   it("does not preflight-fail verification-only relative paths that are not yet materialized", () => {
     const fakeThis: Any = Object.create((TaskExecutor as Any).prototype);
     fakeThis.workspace = { path: process.cwd() };
