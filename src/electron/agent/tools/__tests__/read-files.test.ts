@@ -278,6 +278,16 @@ describe("readFilesByPatterns", () => {
     );
   });
 
+  it("reports the stuck phase when write_file times out internally", async () => {
+    (fileTools as Any).enforceSymlinkSafeAccess = vi.fn(() => new Promise(() => {}));
+
+    await expect(
+      fileTools.writeFile("stuck.md", "content", {
+        timeoutMs: 25,
+      }),
+    ).rejects.toThrow(/write_file timed out during enforce symlink safe access/i);
+  });
+
   it("redirects new automated task outputs into the managed .cowork zone", async () => {
     const daemon = {
       logEvent: vi.fn(),
