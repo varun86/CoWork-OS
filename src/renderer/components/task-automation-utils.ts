@@ -23,6 +23,42 @@ export type TaskAutomationSchedule =
   | { kind: "every"; everyMs: number; anchorMs?: number }
   | { kind: "cron"; expr: string; tz?: string };
 
+export type TaskRoutineTriggerPreset = TaskAutomationSchedulePreset | "manual";
+
+export interface TaskRoutineCreatePayload {
+  name: string;
+  description: string;
+  enabled: boolean;
+  workspaceId: string;
+  instructions: string;
+  executionTarget: {
+    kind: "workspace" | "worktree";
+  };
+  contextBindings: {
+    metadata: Record<string, string>;
+  };
+  connectorPolicy: {
+    mode: "prefer";
+    connectorIds: string[];
+  };
+  connectors: string[];
+  approvalPolicy: {
+    mode: "inherit" | "confirm_external";
+  };
+  outputs: Array<{ kind: "task_only" }>;
+  triggers: Array<
+    | {
+        type: "manual";
+        enabled: boolean;
+      }
+    | {
+        type: "schedule";
+        enabled: boolean;
+        schedule: TaskAutomationSchedule;
+      }
+  >;
+}
+
 export interface TaskAutomationTemplate {
   id: string;
   name: string;
@@ -111,6 +147,56 @@ export function buildTaskAutomationPrompt(prompt: string, task: Task, deeplink: 
   return `${prompt.trim()}${sourceLines.join("\n")}`;
 }
 
+export function buildTaskRoutineCreate({
+  task,
+  workspace,
+  name,
+  prompt,
+  runMode,
+  triggerPreset,
+  schedule,
+  deeplink,
+}: BuildTaskRoutineCreateParams): TaskRoutineCreatePayload {
+  const workspaceId = task.workspaceId || workspace?.id || "";
+  const triggers: TaskRoutineCreatePayload["triggers"] =
+    triggerPreset === "manual" || !schedule
+      ? [{ type: "manual", enabled: true }]
+      : [
+          { type: "schedule", enabled: true, schedule },
+          { type: "manual", enabled: true },
+        ];
+
+  return {
+    name: name.trim(),
+    description: `Created from task ${task.id}${deeplink ? ` (${deeplink})` : ""}`,
+    enabled: true,
+    workspaceId,
+    instructions: buildTaskAutomationPrompt(prompt, task, deeplink),
+    executionTarget: {
+      kind: runMode === "worktree" ? "worktree" : "workspace",
+    },
+    contextBindings: {
+      metadata: {
+        source: "task_session",
+        sourceTaskId: task.id,
+        sourceTaskTitle: task.title,
+        ...(task.sessionId ? { sourceSessionId: task.sessionId } : {}),
+        ...(deeplink ? { sourceLink: deeplink } : {}),
+      },
+    },
+    connectorPolicy: {
+      mode: "prefer",
+      connectorIds: [],
+    },
+    connectors: [],
+    approvalPolicy: {
+      mode: runMode === "local" ? "confirm_external" : "inherit",
+    },
+    outputs: [{ kind: "task_only" }],
+    triggers,
+  };
+}
+
 export interface BuildTaskAutomationCronJobCreateParams {
   task: Task;
   workspace: Workspace | null;
@@ -118,6 +204,17 @@ export interface BuildTaskAutomationCronJobCreateParams {
   prompt: string;
   runMode: TaskAutomationRunMode;
   schedule: TaskAutomationSchedule;
+  deeplink: string;
+}
+
+export interface BuildTaskRoutineCreateParams {
+  task: Task;
+  workspace: Workspace | null;
+  name: string;
+  prompt: string;
+  runMode: TaskAutomationRunMode;
+  triggerPreset: TaskRoutineTriggerPreset;
+  schedule: TaskAutomationSchedule | null;
   deeplink: string;
 }
 
