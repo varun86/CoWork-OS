@@ -1,11 +1,34 @@
 import { useCallback, useEffect, useState } from "react";
 import type { TaskEvent } from "../../../shared/types";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  CircleCheck,
+  CircleDot,
+  Globe2,
+  PencilLine,
+  Search,
+  ShieldCheck,
+  SquareTerminal,
+} from "lucide-react";
 import { getEffectiveTaskEventType } from "../../utils/task-event-compat";
+
+export type ActionBlockIconKind =
+  | "explore"
+  | "search"
+  | "command"
+  | "write"
+  | "web"
+  | "verify"
+  | "approval"
+  | "work";
 
 export interface ActionBlockSummary {
   /** Short summary for collapsed header, e.g. "Explored 7 files, 6 searches" */
   summary: string;
+  /** Semantic icon category for the collapsed header. */
+  iconKind: ActionBlockIconKind;
   /** Total number of actions in the block */
   actionCount: number;
   /** Number of steps in the block */
@@ -90,15 +113,75 @@ export function buildActionBlockSummary(
   const totalTools = Array.from(toolCounts.values()).reduce((a, b) => a + b, 0);
 
   const parts: string[] = [];
-  const readFiles = (toolCounts.get("read_file") || 0) + (toolCounts.get("list_directory") || 0);
-  const searches = (toolCounts.get("grep") || 0) + (toolCounts.get("search_files") || 0);
-  const writes = (toolCounts.get("write_file") || 0) + (toolCounts.get("edit_file") || 0);
+  const readFiles =
+    (toolCounts.get("read_file") || 0) +
+    (toolCounts.get("read_files") || 0) +
+    (toolCounts.get("list_directory") || 0) +
+    (toolCounts.get("glob") || 0);
+  const searches =
+    (toolCounts.get("grep") || 0) +
+    (toolCounts.get("search_files") || 0) +
+    (toolCounts.get("context_grep") || 0);
+  const createdFiles = toolCounts.get("write_file") || 0;
+  const editedFiles = toolCounts.get("edit_file") || 0;
+  const writes = createdFiles + editedFiles;
+  const commands =
+    (toolCounts.get("run_command") || 0) +
+    (toolCounts.get("run_skill") || 0) +
+    (toolCounts.get("execute_code") || 0);
   const webLookups =
     (toolCounts.get("web_fetch") || 0) +
     (toolCounts.get("web_search") || 0) +
     (toolCounts.get("http_request") || 0);
+  let verificationSteps = 0;
+  for (const event of events) {
+    const effectiveType = getEffectiveTaskEventType(event);
+    if (
+      effectiveType === "verification_started" ||
+      effectiveType === "verification_passed" ||
+      effectiveType === "verification_failed" ||
+      effectiveType === "verification_pending_user_action"
+    ) {
+      verificationSteps += 1;
+    }
+  }
+  let approvedRequests = 0;
+  for (const event of events) {
+    const effectiveType = getEffectiveTaskEventType(event);
+    const payload = event.payload && typeof event.payload === "object" ? event.payload : {};
+    const payloadStatus =
+      typeof (payload as Record<string, unknown>).status === "string"
+        ? ((payload as Record<string, unknown>).status as string)
+        : "";
+    if (
+      effectiveType === "approval_granted" ||
+      event.type === "approval_granted" ||
+      event.legacyType === "approval_granted" ||
+      payloadStatus === "approved"
+    ) {
+      approvedRequests += 1;
+    }
+  }
+
+  const iconKind: ActionBlockIconKind =
+    approvedRequests > 0
+      ? "approval"
+      : writes > 0
+        ? "write"
+        : commands > 0
+          ? "command"
+          : searches > 0 || readFiles > 0
+            ? "search"
+            : webLookups > 0
+              ? "web"
+              : verificationSteps > 0
+                ? "verify"
+                : "work";
 
   if (isActive) {
+    if (approvedRequests > 0) {
+      parts.push("Approved requests…");
+    }
     if (readFiles > 0 && searches > 0) {
       parts.push("Exploring files and searching the codebase…");
     } else if (readFiles > 0) {
@@ -110,7 +193,14 @@ export function buildActionBlockSummary(
       parts.push("Gathering web sources…");
     }
     if (writes > 0) {
-      parts.push("Editing files…");
+      if (createdFiles > 0 && editedFiles === 0) {
+        parts.push("Creating files…");
+      } else {
+        parts.push("Editing files…");
+      }
+    }
+    if (commands > 0) {
+      parts.push("Running commands…");
     }
     if (parts.length === 0 && stepCount > 0) {
       parts.push("Working…");
@@ -118,19 +208,33 @@ export function buildActionBlockSummary(
       parts.push("Working…");
     }
   } else {
+    if (approvedRequests > 0) {
+      parts.push(`Approved ${approvedRequests} request${approvedRequests === 1 ? "" : "s"}`);
+    }
+    if (createdFiles > 0 && editedFiles > 0) {
+      parts.push(
+        `Created ${createdFiles} file${createdFiles === 1 ? "" : "s"}, edited ${editedFiles} file${editedFiles === 1 ? "" : "s"}`,
+      );
+    } else if (createdFiles > 0) {
+      parts.push(`Created ${createdFiles} file${createdFiles === 1 ? "" : "s"}`);
+    } else if (editedFiles > 0) {
+      parts.push(`Edited ${editedFiles} file${editedFiles === 1 ? "" : "s"}`);
+    }
     if (readFiles > 0 && searches > 0) {
       parts.push(
         `Explored ${readFiles} file${readFiles === 1 ? "" : "s"}, ${searches} search${searches === 1 ? "" : "es"}`,
       );
     } else if (readFiles > 0) {
-      parts.push(`${readFiles} file${readFiles === 1 ? "" : "s"} read`);
+      parts.push(`Explored ${readFiles} file${readFiles === 1 ? "" : "s"}`);
     } else if (searches > 0) {
-      parts.push(`${searches} search${searches === 1 ? "" : "es"}`);
+      parts.push(`Searched ${searches} time${searches === 1 ? "" : "s"}`);
     }
     if (webLookups > 0) {
       parts.push(`${webLookups} web lookup${webLookups === 1 ? "" : "s"}`);
     }
-    if (writes > 0) parts.push(`${writes} file${writes === 1 ? "" : "s"} modified`);
+    if (commands > 0) {
+      parts.push(`${parts.length > 0 ? "ran" : "Ran"} ${commands} command${commands === 1 ? "" : "s"}`);
+    }
     if (stepCount > 0 && parts.length === 0) parts.push(`${stepCount} step${stepCount === 1 ? "" : "s"}`);
   }
 
@@ -169,6 +273,7 @@ export function buildActionBlockSummary(
 
   return {
     summary,
+    iconKind,
     actionCount: totalTools + stepCount || events.length,
     stepCount,
     toolCallCount: totalTools,
@@ -197,6 +302,7 @@ function formatTokenCount(count: number): string {
 interface ActionBlockProps {
   blockId: string;
   summary: string;
+  iconKind: ActionBlockIconKind;
   stepCount: number;
   toolCallCount: number;
   durationMs: number;
@@ -211,6 +317,28 @@ interface ActionBlockProps {
   children: React.ReactNode;
 }
 
+const ACTION_BLOCK_ICONS: Record<ActionBlockIconKind, LucideIcon> = {
+  explore: Search,
+  search: Search,
+  command: SquareTerminal,
+  write: PencilLine,
+  web: Globe2,
+  verify: ShieldCheck,
+  approval: CircleCheck,
+  work: CircleDot,
+};
+
+const ACTION_BLOCK_ICON_LABELS: Record<ActionBlockIconKind, string> = {
+  explore: "Exploration activity",
+  search: "Search activity",
+  command: "Command activity",
+  write: "File change activity",
+  web: "Web activity",
+  verify: "Verification activity",
+  approval: "Approved activity",
+  work: "Agent activity",
+};
+
 /**
  * Collapsible block for actions (tool calls, steps) between assistant messages.
  * Cursor-style: expanded while active, collapsed when next assistant message arrives.
@@ -218,6 +346,7 @@ interface ActionBlockProps {
 export function ActionBlock({
   blockId,
   summary,
+  iconKind,
   stepCount,
   toolCallCount,
   durationMs,
@@ -231,6 +360,7 @@ export function ActionBlock({
   children,
 }: ActionBlockProps) {
   const [localExpanded, setLocalExpanded] = useState(expanded);
+  const ActivityIcon = ACTION_BLOCK_ICONS[iconKind];
 
   useEffect(() => {
     setLocalExpanded(expanded);
@@ -267,6 +397,9 @@ export function ActionBlock({
           ) : (
             <ChevronRight size={14} strokeWidth={2.5} />
           )}
+        </span>
+        <span className={`action-block-kind-icon kind-${iconKind}`} title={ACTION_BLOCK_ICON_LABELS[iconKind]}>
+          <ActivityIcon size={16} strokeWidth={1.8} aria-hidden="true" />
         </span>
         <span className="action-block-summary">{summary}</span>
         {!visibleExpanded && lastStepLabel && (
