@@ -4,16 +4,16 @@ import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { Sidebar, truncateSidebarTitleAtWordBoundary } from "../Sidebar";
+import { Sidebar, truncateSidebarTitleToFit } from "../Sidebar";
 
 const stylesPath = fileURLToPath(new URL("../../styles/index.css", import.meta.url));
 
 describe("Sidebar top-level destinations", () => {
-  it("truncates sidebar titles at whole words", () => {
+  it("truncates sidebar titles to the available width", () => {
     const measureByCharacters = (value: string) => value.length;
 
     expect(
-      truncateSidebarTitleAtWordBoundary(
+      truncateSidebarTitleToFit(
         'check the "new country for onboarding',
         25,
         measureByCharacters,
@@ -21,24 +21,32 @@ describe("Sidebar top-level destinations", () => {
     ).toBe('check the "new country...');
 
     expect(
-      truncateSidebarTitleAtWordBoundary(
+      truncateSidebarTitleToFit(
         "I need to create a presentation",
         20,
         measureByCharacters,
       ),
     ).toBe("I need to create...");
+
+    expect(
+      truncateSidebarTitleToFit(
+        "Check documentation please",
+        18,
+        measureByCharacters,
+      ),
+    ).toBe("Check documenta...");
   });
 
-  it("does not show a partial first word when a sidebar title is very narrow", () => {
+  it("keeps very narrow sidebar titles compact", () => {
     const measureByCharacters = (value: string) => value.length;
 
     expect(
-      truncateSidebarTitleAtWordBoundary(
+      truncateSidebarTitleToFit(
         "Presentation",
         5,
         measureByCharacters,
       ),
-    ).toBe("...");
+    ).toBe("Pr...");
   });
 
   it("renders Agents as a primary destination and keeps More collapsed by default", () => {
@@ -235,12 +243,12 @@ describe("Sidebar top-level destinations", () => {
     expect(source).toMatch(
       /\.sidebar\s*\{[\s\S]*container-type:\s*inline-size;[\s\S]*\}/,
     );
-    expect(source).toMatch(/@container\s*\(max-width:\s*240px\)/);
+    expect(source).toMatch(/@container\s*\(max-width:\s*280px\)/);
     expect(source).toMatch(
-      /@container\s*\(max-width:\s*240px\)\s*\{[\s\S]*\.cli-task-time\s*\{[\s\S]*display:\s*none;[\s\S]*\}/,
+      /@container\s*\(max-width:\s*280px\)\s*\{[\s\S]*\.cli-task-time\s*\{[\s\S]*display:\s*none;[\s\S]*\}/,
     );
     expect(source).toMatch(
-      /@container\s*\(max-width:\s*240px\)\s*\{[\s\S]*\.cli-task-item\s*\{[\s\S]*gap:\s*4px;[\s\S]*padding-right:\s*6px\s*!important;[\s\S]*\}/,
+      /@container\s*\(max-width:\s*280px\)\s*\{[\s\S]*\.cli-task-item\s*\{[\s\S]*gap:\s*4px;[\s\S]*padding-right:\s*6px\s*!important;[\s\S]*\}/,
     );
   });
 });
