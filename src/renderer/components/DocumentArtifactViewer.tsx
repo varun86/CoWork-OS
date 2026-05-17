@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   AlignLeft,
   ArrowUp,
@@ -80,6 +82,18 @@ type ViewerData = NonNullable<FileViewerResult["data"]>;
 
 function getFileName(filePath: string): string {
   return filePath.split(/[\\/]/).pop() || filePath;
+}
+
+function getDocumentViewerIconLabel(filePath: string, fileType?: ViewerData["fileType"]): string {
+  const lowerPath = filePath.toLowerCase();
+  if (
+    fileType === "markdown" ||
+    lowerPath.endsWith(".md") ||
+    lowerPath.endsWith(".markdown")
+  ) {
+    return "M";
+  }
+  return "W";
 }
 
 function formatAttachmentSize(size: number): string {
@@ -344,7 +358,11 @@ export function DocumentArtifactViewer({
           setError(result.error || "Failed to load document");
           return;
         }
-        if (result.data.fileType !== "docx" && result.data.fileType !== "document") {
+        if (
+          result.data.fileType !== "docx" &&
+          result.data.fileType !== "document" &&
+          result.data.fileType !== "markdown"
+        ) {
           setError("File is not a Word-style document.");
           return;
         }
@@ -380,6 +398,8 @@ export function DocumentArtifactViewer({
 
   const formatLabel = preview?.format || getDocumentFormatLabel(fileName);
   const canEditDirectly = Boolean(preview?.canEdit && fileData?.fileType === "docx");
+  const isMarkdownDocument = fileData?.fileType === "markdown";
+  const documentIconLabel = getDocumentViewerIconLabel(filePath, fileData?.fileType);
 
   useEffect(() => {
     if (!canEditDirectly || !preview || !editorRef.current) return;
@@ -559,6 +579,13 @@ export function DocumentArtifactViewer({
         />
       );
     }
+    if (isMarkdownDocument) {
+      return (
+        <div className="document-viewer-markdown markdown-content">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{preview.text || ""}</ReactMarkdown>
+        </div>
+      );
+    }
     return <pre className="document-viewer-text">{preview.text || "Empty document."}</pre>;
   };
 
@@ -566,7 +593,7 @@ export function DocumentArtifactViewer({
     <section className={`document-viewer document-viewer-${mode}`}>
       <div className="document-viewer-tabbar">
         <div className="document-viewer-tab">
-          <span className="document-viewer-file-icon">W</span>
+          <span className="document-viewer-file-icon">{documentIconLabel}</span>
           <span className="document-viewer-tab-title">{fileName}</span>
         </div>
         <button
