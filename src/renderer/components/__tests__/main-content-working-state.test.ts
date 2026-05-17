@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import type { Task, TaskEvent, Workspace } from "../../../shared/types";
 import {
+  collectEndOfTaskArtifactCardStacks,
   collectLatestEndOfTaskArtifactCards,
   collectInlineRunCommandSessionIds,
   composeMessageWithAttachments,
@@ -36,6 +37,7 @@ import { isTaskActivelyWorking } from "../../utils/task-working-state";
 import {
   buildTaskAutomationCronJobCreate,
   buildTaskAutomationSchedule,
+  buildTaskRoutineCreate,
   TASK_AUTOMATION_TEMPLATES,
 } from "../task-automation-utils";
 
@@ -230,10 +232,10 @@ describe("task automation creation", () => {
       }),
     );
 
-    expect(html).toContain("Add automation");
+    expect(html).toContain("Create routine");
     expect(html).toContain("Task menu automation");
     expect(html).toContain("Turn this task into a recurring check");
-    expect(html).toContain("Every 30m");
+    expect(html).toContain("Manual");
   });
 
   it("builds the default Every 30m scheduled job payload from a task", () => {
@@ -271,6 +273,47 @@ describe("task automation creation", () => {
       schedule,
       workspaceId: "workspace-1",
       taskTitle: "Review recent failures",
+    });
+  });
+
+  it("builds a routine payload from a task session", () => {
+    const task = makeTask({
+      id: "task-123",
+      title: "Review recent failures",
+      prompt: "Look at the failing tests",
+      workspaceId: "workspace-1",
+      sessionId: "session-1",
+    });
+    const schedule = buildTaskAutomationSchedule("daily", "")!;
+
+    expect(
+      buildTaskRoutineCreate({
+        task,
+        workspace: makeWorkspace(),
+        name: "Review recent failures",
+        prompt: "Look at the failing tests",
+        runMode: "chat",
+        triggerPreset: "daily",
+        schedule,
+        deeplink: "cowork://tasks/task-123",
+      }),
+    ).toMatchObject({
+      name: "Review recent failures",
+      enabled: true,
+      workspaceId: "workspace-1",
+      executionTarget: { kind: "workspace" },
+      contextBindings: {
+        metadata: {
+          source: "task_session",
+          sourceTaskId: "task-123",
+          sourceSessionId: "session-1",
+        },
+      },
+      outputs: [{ kind: "task_only" }],
+      triggers: [
+        { type: "schedule", enabled: true, schedule },
+        { type: "manual", enabled: true },
+      ],
     });
   });
 
@@ -498,6 +541,41 @@ describe("isTaskActivelyWorking", () => {
         eventId: "assistant",
         lastReferenceIndex: 1,
         lastReferenceTimestamp: 200,
+      },
+    ]);
+  });
+
+  it("anchors generated artifact stacks before later follow-up messages", () => {
+    const completed = makeEvent("completed", 100, "task_completed", {
+      outputSummary: {
+        created: ["docs/managed-agents.md", "docs/getting-started.md"],
+        primaryOutputPath: "docs/managed-agents.md",
+        outputCount: 2,
+      },
+    });
+    const laterUser = makeEvent("user", 200, "user_message", {
+      message: "turn this into a routine",
+    });
+
+    expect(collectEndOfTaskArtifactCardStacks([completed, laterUser])).toEqual([
+      {
+        anchorEventIndex: 0,
+        artifacts: [
+          {
+            path: "docs/managed-agents.md",
+            kind: "document",
+            eventId: "completed",
+            lastReferenceIndex: 0,
+            lastReferenceTimestamp: 100,
+          },
+          {
+            path: "docs/getting-started.md",
+            kind: "document",
+            eventId: "completed",
+            lastReferenceIndex: 0,
+            lastReferenceTimestamp: 100,
+          },
+        ],
       },
     ]);
   });
