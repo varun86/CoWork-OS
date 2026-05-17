@@ -82,6 +82,7 @@ export type SettingsCategory =
   | "awareness-state"
   | "autonomy-chief-of-staff"
   | "supermemory"
+  | "plugin-packs"
   | `plugin:${string}`;
 
 interface SecureSettingsRow {
@@ -105,6 +106,7 @@ export class SecureSettingsRepository {
   private encryptionAvailable: boolean;
   private safeStorage: SafeStorageLike | null;
   private machineId: string | null = null;
+  private unreadableCategories = new Map<string, LoadResult<never>>();
 
   constructor(private db: Database.Database) {
     this.safeStorage = getSafeStorage();
@@ -205,6 +207,7 @@ export class SecureSettingsRepository {
       stmt.run(uuidv4(), category, encryptedData, checksum, now, now);
     }
 
+    this.unreadableCategories.delete(category);
     logger.debug(`Saved settings for category: ${category}`);
   }
 
@@ -227,7 +230,13 @@ export class SecureSettingsRepository {
   ): LoadResult<T> {
     const row = this.findByCategory(category);
     if (!row) {
+      this.unreadableCategories.delete(category);
       return { status: "not_found" };
+    }
+
+    const knownUnreadable = this.unreadableCategories.get(category);
+    if (knownUnreadable) {
+      return knownUnreadable as LoadResult<T>;
     }
 
     try {
@@ -236,15 +245,17 @@ export class SecureSettingsRepository {
       // Verify checksum to detect tampering
       const checksum = this.computeChecksum(decrypted);
       if (checksum !== row.checksum) {
-        if (options.logErrors !== false) {
-          console.error(
-            `[SecureSettingsRepository] Checksum mismatch for category: ${category}. Data may be corrupted.`,
-          );
-        }
-        return {
+        const result: LoadResult<never> = {
           status: "checksum_mismatch",
           error: "Data integrity check failed. Settings may be corrupted.",
         };
+        if (options.logErrors !== false) {
+          console.warn(
+            `[SecureSettingsRepository] Marked secure settings category ${category} unreadable: ${result.error}`,
+          );
+        }
+        this.unreadableCategories.set(category, result);
+        return result;
       }
 
       return {
@@ -253,26 +264,33 @@ export class SecureSettingsRepository {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      if (options.logErrors !== false) {
-        console.error(
-          `[SecureSettingsRepository] Failed to decrypt settings for category: ${category}`,
-          error,
-        );
-      }
-
       // Detect specific failure modes
       if (errorMessage.includes("OS encryption was used but is no longer available")) {
-        return {
+        const result: LoadResult<never> = {
           status: "os_encryption_unavailable",
           error:
             "Settings were encrypted with OS keychain which is no longer accessible. You may need to re-enter your credentials.",
         };
+        if (options.logErrors !== false) {
+          console.warn(
+            `[SecureSettingsRepository] Marked secure settings category ${category} unreadable: ${result.error}`,
+          );
+        }
+        this.unreadableCategories.set(category, result);
+        return result;
       }
 
-      return {
+      const result: LoadResult<never> = {
         status: "decryption_failed",
         error: errorMessage,
       };
+      if (options.logErrors !== false) {
+        console.warn(
+          `[SecureSettingsRepository] Marked secure settings category ${category} unreadable: ${errorMessage}`,
+        );
+      }
+      this.unreadableCategories.set(category, result);
+      return result;
     }
   }
 
@@ -293,6 +311,7 @@ export class SecureSettingsRepository {
   delete(category: SettingsCategory): boolean {
     const stmt = this.db.prepare("DELETE FROM secure_settings WHERE category = ?");
     const result = stmt.run(category);
+    this.unreadableCategories.delete(category);
     return result.changes > 0;
   }
 
