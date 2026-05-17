@@ -4,7 +4,7 @@ import { AgentDaemon } from "../daemon";
 import { normalizeLlmProviderType } from "../../../shared/llmProviderDisplay";
 import { LLM_PROVIDER_TYPES } from "../../../shared/types";
 
-function createDaemonLike() {
+function createDaemonLike(taskOverrides: Record<string, unknown> = {}) {
   let seq = 0;
   return {
     logEvent: (AgentDaemon.prototype as Any).logEvent,
@@ -13,6 +13,7 @@ function createDaemonLike() {
         id: "task-1",
         workspaceId: "workspace-1",
         agentConfig: {},
+        ...taskOverrides,
       }),
     },
     workspaceRepo: {
@@ -52,6 +53,7 @@ function createDaemonLike() {
     maybeEnrichLlmTelemetryPayload: (AgentDaemon.prototype as Any).maybeEnrichLlmTelemetryPayload,
     normalizeArtifactEventPayload: (AgentDaemon.prototype as Any).normalizeArtifactEventPayload,
     maybeEmitAssistantMediaPreview: (AgentDaemon.prototype as Any).maybeEmitAssistantMediaPreview,
+    shouldEmitInlineHtmlFramePreview: (AgentDaemon.prototype as Any).shouldEmitInlineHtmlFramePreview,
   } as Any;
 }
 
@@ -112,6 +114,47 @@ describe("AgentDaemon.logEvent artifact normalization", () => {
     });
 
     expect((daemonLike.persistTimelineEvent as Any).mock.calls).toHaveLength(3);
+  });
+
+  it("emits an internal assistant frame preview for HTML outputs that fit inline surfaces", () => {
+    const daemonLike = createDaemonLike({
+      title: "Show an investment performance chart",
+      prompt: "Create a compact investment performance card with a chart.",
+    });
+
+    AgentDaemon.prototype.logEvent.call(daemonLike, "task-1", "file_created", {
+      path: "artifacts/investment-performance.html",
+      mimeType: "text/html",
+      label: "Investment performance",
+    });
+
+    expect((daemonLike.persistTimelineEvent as Any).mock.calls).toHaveLength(2);
+
+    const [assistantEvent, assistantOptions] = (daemonLike.persistTimelineEvent as Any).mock.calls[1];
+    expect(assistantEvent.type).toBe("timeline_step_updated");
+    expect(assistantEvent.payload.legacyType).toBe("assistant_message");
+    expect(assistantEvent.payload.internal).toBe(true);
+    expect(String(assistantEvent.payload.message)).toContain("::frame{");
+    expect(String(assistantEvent.payload.message)).toContain('path="artifacts/investment-performance.html"');
+    expect(String(assistantEvent.payload.message)).toContain('kind="preview"');
+    expect(assistantOptions.legacyType).toBe("assistant_message");
+  });
+
+  it("does not emit inline frame previews for full website or landing page HTML artifacts", () => {
+    const daemonLike = createDaemonLike({
+      title: "Create a landing page design",
+      prompt: "Build a landing page HTML for a finance app.",
+    });
+
+    AgentDaemon.prototype.logEvent.call(daemonLike, "task-1", "file_created", {
+      path: "artifacts/landing-page.html",
+      mimeType: "text/html",
+      label: "Landing page",
+    });
+
+    expect((daemonLike.persistTimelineEvent as Any).mock.calls).toHaveLength(1);
+    const [fileEvent] = (daemonLike.persistTimelineEvent as Any).mock.calls[0];
+    expect(fileEvent.type).toBe("timeline_artifact_emitted");
   });
 
   it("backfills llm_usage providerType from route logs for every registered provider", () => {
