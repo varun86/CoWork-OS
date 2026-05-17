@@ -10,14 +10,19 @@ SQLite sidecar rather than a new external memory store.
 
 ## Current Concept
 
-CoWork memory now has three complementary shapes:
+CoWork memory now has four complementary shapes:
 
 - **Curated hot memory**: short, prompt-visible facts and rules managed through curated memory.
 - **Archive memory**: durable local memory rows stored in `memories`.
 - **Structured observations**: metadata rows keyed by `memory_id` that describe archive memories with title, narrative, facts, concepts, provenance, files, tools, source events, privacy state, and migration status.
+- **Durable runtime context**: optional task-scoped message and compaction-summary rows used only for active-task recall through `context_grep` and `context_describe`.
 
 Structured observations are not a replacement for archive memory. They are an index and control
 plane over it.
+
+Durable runtime context is not a replacement for structured observations. It is a runtime continuity
+lane for long active tasks, especially after context compaction. See
+[Durable Runtime Context](durable-runtime-context.md).
 
 Dreaming uses that index as evidence for memory curation. It can propose stale-memory archives,
 corrections, open loops, recurring tasks, constraints, ignored-noise patterns, or curated-memory
@@ -124,6 +129,14 @@ model with unnecessary full memory content.
 
 All agent-visible detail lookups are scoped to the active workspace.
 
+Durable Runtime Context adds a narrower task-scoped workflow for compacted active-task recall:
+
+1. `context_grep`: search sanitized task messages and source-linked compaction summaries for the active task.
+2. `context_describe`: expand a selected durable context result, including linked source messages for summaries.
+
+These tools default to the active task. A supplied `taskId` is ignored unless the user explicitly
+asked to inspect that task and the tool call sets `explicitUserRequest: true`.
+
 ## Memory Hub Inspector
 
 The Memory Hub Inspector is the primary user surface for structured observations.
@@ -182,6 +195,7 @@ Structured observation changes should include tests for:
 - `<no-memory>` and `<private>` handling
 - prompt recall exclusion for redacted and suppressed observations
 - progressive recall tool behavior
+- durable runtime context enablement, active-task scoping, clear-memory deletion, durable-result echo filtering, direct-fact ranking, large-payload references, and summary-DAG parent links
 - Memory Hub Inspector loading, editing, redaction, promotion, suppression, and rebuild flows
 - Dreaming evidence use, candidate review state, and accepted-candidate application through owning memory services
 
