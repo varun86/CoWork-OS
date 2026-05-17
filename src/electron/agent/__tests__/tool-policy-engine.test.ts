@@ -23,6 +23,16 @@ describe("tool-policy-engine request_user_input gating", () => {
     expect(decision.decision).toBe("allow");
   });
 
+  it("denies request_user_input when structured human input is disabled", () => {
+    const decision = evaluateToolPolicy("request_user_input", {
+      executionMode: "plan",
+      taskDomain: "auto",
+      humanInputPolicy: "hard_blockers",
+    });
+    expect(decision.decision).toBe("deny");
+    expect(decision.reason).toContain("structured human input is disabled");
+  });
+
   it("denies request_user_input in execute mode", () => {
     const decision = evaluateToolPolicy("request_user_input", {
       executionMode: "execute",
