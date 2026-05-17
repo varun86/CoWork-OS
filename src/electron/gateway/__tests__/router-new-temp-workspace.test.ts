@@ -54,10 +54,16 @@ describe("MessageRouter /new temp", () => {
     (router as Any).workspaceRepo.findById = vi.fn().mockReturnValue(undefined);
     (router as Any).sessionManager.setSessionWorkspace = setSessionWorkspace;
 
+    const sendMessage = vi.fn().mockResolvedValue("msg-1");
     const adapter = {
       type: "whatsapp",
-      sendMessage: vi.fn().mockResolvedValue("msg-1"),
+      status: "connected",
+      onMessage: vi.fn(),
+      onError: vi.fn(),
+      onStatusChange: vi.fn(),
+      sendMessage,
     } as Any;
+    router.registerAdapter(adapter, "whatsapp-1");
 
     await (router as Any).handleNewTaskCommand(
       adapter,
@@ -72,14 +78,14 @@ describe("MessageRouter /new temp", () => {
     expect(setSessionWorkspace).toHaveBeenCalledTimes(1);
     const workspaceId = setSessionWorkspace.mock.calls[0]?.[1] as string;
     expect(workspaceId).toMatch(new RegExp(`^${TEMP_WORKSPACE_ID_PREFIX}gateway-session-1-`));
-    expect(adapter.sendMessage).toHaveBeenCalledWith(
+    expect(sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         chatId: "chat-1",
         parseMode: "markdown",
         text: expect.stringContaining("Ready for a new temporary session"),
       }),
     );
-    expect(adapter.sendMessage.mock.calls[0]?.[0]?.text).not.toContain(
+    expect(sendMessage.mock.calls[0]?.[0]?.text).not.toContain(
       "Workspace:",
     );
   });
