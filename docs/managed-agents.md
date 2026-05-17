@@ -10,6 +10,11 @@ V1 introduces three control-plane resources:
 
 The implementation is local-first and additive. Managed resources are exposed through the control plane, while existing `Task`, `AgentTeamRun`, `task_events`, and `session_runtime_v2` remain the execution primitives underneath.
 
+<p align="center">
+  <img src="../resources/branding/images/cowork-os-3.webp" alt="Agents Hub" width="700">
+  <br><em>Agents Hub is the main surface for reusable managed agents, templates, and starter prompts.</em>
+</p>
+
 ## Why This Exists
 
 CoWork already had the low-level pieces for durable execution, team runs, worktree isolation, MCP integration, and resumable task runtime state. Managed Agents packages those pieces into reusable definitions and a stable run identity so UI and backend surfaces can reason about durable agent runs directly instead of reconstructing them from ad hoc task metadata.
