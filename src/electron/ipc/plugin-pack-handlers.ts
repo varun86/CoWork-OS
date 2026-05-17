@@ -4,7 +4,7 @@ import { PluginRegistry } from "../extensions/registry";
 import { MCPClientManager } from "../mcp/client/MCPClientManager";
 import { MCPSettingsManager } from "../mcp/settings";
 import { getCustomSkillLoader } from "../agent/custom-skill-loader";
-import { isPackAllowed, isPackRequired } from "../admin/policies";
+import { isPackAllowed, isPackRequired, loadPoliciesStrict } from "../admin/policies";
 
 /**
  * Serializable pack data sent to the renderer
@@ -120,11 +120,12 @@ export function setupPluginPackHandlers(): void {
   // List all plugin packs with their contents
   ipcMain.handle(IPC_CHANNELS.PLUGIN_PACK_LIST, async () => {
     await ensureRegistryInitialized();
+    const policies = loadPoliciesStrict();
     const packs = registry.getPluginsByType("pack");
     return packs.map((p): PluginPackData => {
       const m = p.manifest;
-      const blocked = !isPackAllowed(m.name);
-      const required = isPackRequired(m.name);
+      const blocked = !policies || !isPackAllowed(m.name, policies);
+      const required = !!policies && isPackRequired(m.name, policies);
       return {
         name: m.name,
         displayName: m.displayName,
@@ -176,7 +177,10 @@ export function setupPluginPackHandlers(): void {
     if (!plugin || plugin.manifest.type !== "pack") {
       return null;
     }
+    const policies = loadPoliciesStrict();
     const m = plugin.manifest;
+    const blocked = !policies || !isPackAllowed(m.name, policies);
+    const required = !!policies && isPackRequired(m.name, policies);
     return {
       name: m.name,
       displayName: m.displayName,
@@ -207,10 +211,10 @@ export function setupPluginPackHandlers(): void {
         icon: r.icon,
         color: r.color,
       })),
-      state: !isPackAllowed(m.name) ? "disabled" : plugin.state,
-      enabled: !isPackAllowed(m.name) ? false : plugin.state !== "disabled",
-      policyBlocked: !isPackAllowed(m.name),
-      policyRequired: isPackRequired(m.name),
+      state: blocked ? "disabled" : plugin.state,
+      enabled: blocked ? false : plugin.state !== "disabled",
+      policyBlocked: blocked,
+      policyRequired: required,
       securityReport: plugin.securityReport,
     } satisfies PluginPackData;
   });
@@ -221,11 +225,15 @@ export function setupPluginPackHandlers(): void {
     if (!name || typeof name !== "string") {
       throw new Error("Pack name is required");
     }
+    const policies = loadPoliciesStrict();
+    if (!policies) {
+      throw new Error("Admin policies failed to load; refusing to change plugin pack state");
+    }
     // Policy enforcement
-    if (!isPackAllowed(name)) {
+    if (!isPackAllowed(name, policies)) {
       throw new Error(`Pack "${name}" is blocked by admin policy`);
     }
-    if (!enabled && isPackRequired(name)) {
+    if (!enabled && isPackRequired(name, policies)) {
       throw new Error(`Pack "${name}" is required by admin policy and cannot be disabled`);
     }
     const plugin = registry.getPlugin(name);
@@ -234,12 +242,31 @@ export function setupPluginPackHandlers(): void {
     }
 
     const currentlyEnabled = plugin.state !== "disabled";
+    const previousPersistedState = registry.getPackEnabled(name);
+    const previousRuntimeState = plugin.state;
     registry.setPackEnabled(name, enabled);
 
-    // Reload to apply declarative registration state immediately.
+    // Apply declarative registration state immediately.
     // This keeps runtime skills/connectors aligned with persisted pack state.
-    if (currentlyEnabled !== enabled) {
-      await registry.reloadPlugin(name);
+    try {
+      if (currentlyEnabled !== enabled) {
+        if (enabled) {
+          await registry.reloadPlugin(name);
+        } else {
+          await registry.disablePlugin(name);
+        }
+      }
+    } catch (error) {
+      try {
+        registry.restorePackEnabled(name, previousPersistedState);
+        const restored = registry.getPlugin(name);
+        if (restored) {
+          restored.state = previousRuntimeState;
+        }
+      } catch (rollbackError) {
+        console.warn("[PluginPacks] Failed to roll back pack toggle state:", rollbackError);
+      }
+      throw error;
     }
 
     const updated = registry.getPlugin(name);
@@ -257,23 +284,33 @@ export function setupPluginPackHandlers(): void {
       if (!packName || !skillId) {
         throw new Error("Pack name and skill ID are required");
       }
+      const policies = loadPoliciesStrict();
+      if (!policies) {
+        throw new Error("Admin policies failed to load; refusing to change plugin skill state");
+      }
       const plugin = registry.getPlugin(packName);
       if (!plugin || plugin.manifest.type !== "pack") {
         throw new Error(`Pack "${packName}" not found`);
       }
-      if (!isPackAllowed(packName)) {
+      if (!isPackAllowed(packName, policies)) {
         throw new Error(`Pack "${packName}" is blocked by admin policy`);
       }
-      if (!enabled && isPackRequired(packName)) {
+      if (!enabled && isPackRequired(packName, policies)) {
         throw new Error(`Pack "${packName}" is required by admin policy and cannot be disabled`);
       }
       const skill = (plugin.manifest.skills || []).find((s) => s.id === skillId);
       if (!skill) {
         throw new Error(`Skill "${skillId}" not found in pack "${packName}"`);
       }
+      const previousSkillState = skill.enabled;
       skill.enabled = enabled;
       // Persist skill states alongside pack states
-      registry.setSkillEnabled(packName, skillId, enabled);
+      try {
+        registry.setSkillEnabled(packName, skillId, enabled);
+      } catch (error) {
+        skill.enabled = previousSkillState;
+        throw error;
+      }
       return { success: true, packName, skillId, enabled };
     },
   );
