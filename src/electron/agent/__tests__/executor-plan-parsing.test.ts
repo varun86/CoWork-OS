@@ -110,6 +110,20 @@ describe("TaskExecutor plan parsing", () => {
     expect(executor.refreshProviderIfSettingsChanged).toHaveBeenCalledWith("strong");
   });
 
+  it("does not emit llm_error when plan creation is aborted by user cancellation", async () => {
+    const executor = createPlanExecutor({
+      usage: { inputTokens: 1, outputTokens: 2 },
+      content: [],
+    });
+    executor.cancelled = true;
+    executor.cancelReason = "user";
+    executor.callLLMWithRetry = vi.fn().mockRejectedValue(new Error("Request cancelled"));
+
+    await expect(executor.createPlan()).rejects.toThrow("Request cancelled");
+
+    expect(executor.emitEvent).not.toHaveBeenCalledWith("llm_error", expect.anything());
+  });
+
   it("uses a direct one-step plan for simple image generation prompts", async () => {
     const response = {
       usage: { inputTokens: 1, outputTokens: 2 },
@@ -146,6 +160,46 @@ describe("TaskExecutor plan parsing", () => {
 
     expect(executor.callLLMWithRetry).not.toHaveBeenCalled();
     expect(executor.plan.steps).toHaveLength(1);
+  });
+
+  it("uses a direct one-step plan for simple Markdown file creation prompts", async () => {
+    const executor = createPlanExecutor({
+      usage: { inputTokens: 1, outputTokens: 2 },
+      content: [
+        { type: "text", text: '{"description":"P","steps":[{"id":"1","description":"Do the thing"}]}' },
+      ],
+    });
+    executor.task.title = "Create sample files";
+    executor.task.prompt = "create 2 sample md files";
+    executor.task.rawPrompt = "create 2 sample md files";
+
+    await executor.createPlan();
+
+    expect(executor.callLLMWithRetry).not.toHaveBeenCalled();
+    expect(executor.plan.steps).toHaveLength(1);
+    expect(executor.plan.steps[0].description).toContain("sample-1.md");
+    expect(executor.plan.steps[0].description).toContain("sample-2.md");
+
+    const contract = executor.resolveStepExecutionContract(executor.plan.steps[0]);
+    expect(Array.from(contract.requiredTools)).toContain("write_file");
+  });
+
+  it("keeps non-trivial file requests on the normal planning path", async () => {
+    const response = {
+      usage: { inputTokens: 1, outputTokens: 2 },
+      content: [
+        { type: "text", text: '{"description":"P","steps":[{"id":"1","description":"Do the thing"}]}' },
+      ],
+    };
+    const executor = createPlanExecutor(response);
+    executor.task.title = "Build app";
+    executor.task.prompt = "create a web app and write README.md documentation";
+    executor.task.rawPrompt = "create a web app and write README.md documentation";
+
+    await executor.createPlan();
+
+    expect(executor.callLLMWithRetry).toHaveBeenCalled();
+    expect(executor.plan.steps[0].description).toBe("Do the thing");
   });
 
   it("adds a final XLSX workbook step when a spreadsheet plan only contains research steps", async () => {
@@ -553,6 +607,208 @@ image_generation_contract:
     expect(executor.plan.steps[0].description).toContain("Research the competition constraints");
     expect(executor.plan.steps[1].description).toContain("Build and save a prototype");
     expect(executor.plan.steps[2].kind).toBe("verification");
+  });
+
+  it("uses numbered task prompt steps when a local model returns freeform planning prose", async () => {
+    const response = {
+      usage: { inputTokens: 10, outputTokens: 20 },
+      content: [
+        {
+          type: "text",
+          text: [
+            "I'll research both repos, gather star history and growth events, and build the comparison dashboard for you.",
+            "Let's get started.",
+            "First, I'll locate the repositories and gather their core stats and growth history.",
+            "searching for repositories...",
+          ].join("\n"),
+        },
+      ],
+    };
+    const executor = createPlanExecutor(response);
+    const prompt = [
+      "Research and compare two GitHub repositories: Hermes Agent and OpenClaw.",
+      "Step 1: Find their GitHub pages and collect current stats.",
+      "Step 2: Get the full star history for both projects.",
+      "Step 3: Search the web for key events that caused growth spikes.",
+      "Step 4: Build a beautiful HTML dashboard and save it.",
+    ].join("\n");
+    executor.provider = { type: "ollama" };
+    executor.modelId = "qwen3.6:35b";
+    executor.task.prompt = prompt;
+    executor.getExecutionTaskPrompt = vi.fn().mockReturnValue(prompt);
+    executor.getContractPrompt = vi.fn().mockReturnValue(prompt);
+
+    await executor.createPlan();
+
+    const descriptions = executor.plan?.steps?.map((step: Any) => step.description) || [];
+    expect(descriptions).toEqual(
+      expect.arrayContaining([
+        "Find their GitHub pages and collect current stats.",
+        "Get the full star history for both projects.",
+        "Search the web for key events that caused growth spikes.",
+        "Build a beautiful HTML dashboard and save it.",
+      ]),
+    );
+    expect(descriptions.join("\n")).not.toMatch(/searching for repositories|let'?s get started/i);
+    expect(executor.emitEvent).toHaveBeenCalledWith(
+      "log",
+      expect.objectContaining({ metric: "plan_text_fallback_used_task_steps" }),
+    );
+  });
+
+  it("limits local-model tool batches and defers same-turn writes after reads", () => {
+    const executor = createPlanExecutor({ content: [] });
+    executor.provider = { type: "ollama" };
+    const calls = [
+      { index: 0, toolUse: { id: "t1", name: "web_search", input: { query: "a" } } },
+      {
+        index: 1,
+        toolUse: { id: "t2", name: "http_request", input: { url: "https://example.com/a" } },
+      },
+      { index: 2, toolUse: { id: "t3", name: "web_search", input: { query: "b" } } },
+      {
+        index: 3,
+        toolUse: { id: "t4", name: "web_fetch", input: { url: "https://example.com/b" } },
+      },
+      { index: 4, toolUse: { id: "t5", name: "web_search", input: { query: "c" } } },
+      { index: 5, toolUse: { id: "t6", name: "edit_file", input: { file_path: "out.html" } } },
+    ];
+
+    const limited = executor.limitLocalModelToolBatch(calls, "step", "s1");
+
+    expect(limited.executableCalls.map((call: Any) => call.toolUse.id)).toEqual([
+      "t1",
+      "t2",
+      "t3",
+      "t4",
+    ]);
+    expect(limited.deferredToolResults).toHaveLength(2);
+    expect(limited.deferredToolResults.every((result: Any) => result.is_error === false)).toBe(true);
+    expect(JSON.parse(limited.deferredToolResults[0].content).reason).toBe("batch_limit");
+    expect(JSON.parse(limited.deferredToolResults[1].content).reason).toBe(
+      "mixed_read_write_batch",
+    );
+    expect(executor.emitEvent).toHaveBeenCalledWith(
+      "log",
+      expect.objectContaining({
+        metric: "local_model_tool_batch_deferred",
+        requested: 6,
+        executed: 4,
+        deferred: 2,
+      }),
+    );
+  });
+
+  it("clamps local-model web searches to five results", () => {
+    const executor = createPlanExecutor({ content: [] });
+    executor.provider = { type: "ollama" };
+    const input = { query: "Hermes Agent", maxResults: 10 };
+
+    executor.applyLocalModelNetworkInputLimits("web_search", input);
+
+    expect(input.maxResults).toBe(5);
+    expect(executor.emitEvent).toHaveBeenCalledWith(
+      "log",
+      expect.objectContaining({
+        metric: "local_model_web_search_max_results_clamped",
+        maxResults: 5,
+      }),
+    );
+  });
+
+  it("summarizes GitHub http_request repo payloads without keeping full JSON bodies", () => {
+    const executor = createPlanExecutor({ content: [] });
+
+    const summary = executor.summarizeToolResult(
+      "http_request",
+      {
+        url: "https://api.github.com/repos/NousResearch/hermes-agent",
+        status: 200,
+        body: JSON.stringify({
+          full_name: "NousResearch/hermes-agent",
+          stargazers_count: 123,
+          forks_count: 45,
+          open_issues_count: 6,
+          created_at: "2025-01-02T00:00:00Z",
+          pushed_at: "2026-05-16T00:00:00Z",
+          html_url: "https://github.com/NousResearch/hermes-agent",
+        }),
+      },
+      { url: "https://api.github.com/repos/NousResearch/hermes-agent" },
+    );
+
+    expect(summary).toContain("repo=NousResearch/hermes-agent");
+    expect(summary).toContain("stars=123");
+    expect(summary).toContain("forks=45");
+    expect(summary).toContain("created=2025-01-02T00:00:00Z");
+    expect(summary).not.toContain("stargazers_count");
+  });
+
+  it("forces local-model analysis step finalization after enough successful evidence", () => {
+    const executor = createPlanExecutor({ content: [] });
+    executor.provider = { type: "ollama" };
+    const messages = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "t1",
+            content: "x".repeat(21_000),
+            is_error: false,
+          },
+        ],
+      },
+    ];
+
+    const shouldFinalize = executor.shouldForceLocalModelStepFinalization({
+      iterationCount: 2,
+      stepStartedAt: Date.now(),
+      stepToolCallCount: 2,
+      messages,
+      stepContract: { mode: "analysis_only", requiresMutation: false },
+      isVerificationStep: false,
+      isSummaryStep: false,
+      hadAnyToolSuccess: true,
+    });
+
+    expect(shouldFinalize).toBe(true);
+  });
+
+  it("keeps local-model mutation-required steps open for artifact creation", () => {
+    const executor = createPlanExecutor({ content: [] });
+    executor.provider = { type: "ollama" };
+
+    const shouldFinalize = executor.shouldForceLocalModelStepFinalization({
+      iterationCount: 8,
+      stepStartedAt: Date.now() - 500_000,
+      stepToolCallCount: 20,
+      messages: [],
+      stepContract: { mode: "mutation_required", requiresMutation: true },
+      isVerificationStep: false,
+      isSummaryStep: false,
+      hadAnyToolSuccess: true,
+    });
+
+    expect(shouldFinalize).toBe(false);
+  });
+
+  it("does not force local-model finalization on low-evidence analysis loops", () => {
+    const executor = createPlanExecutor({ content: [] });
+    executor.provider = { type: "ollama" };
+
+    const shouldFinalize = executor.shouldForceLocalModelStepFinalization({
+      iterationCount: 4,
+      stepStartedAt: Date.now() - 500_000,
+      stepToolCallCount: 2,
+      messages: [],
+      stepContract: { mode: "analysis_only", requiresMutation: false },
+      isVerificationStep: false,
+      isSummaryStep: false,
+      hadAnyToolSuccess: true,
+    });
+
+    expect(shouldFinalize).toBe(false);
   });
 
   it("keeps verification bullet checks attached to the same numbered step", async () => {
