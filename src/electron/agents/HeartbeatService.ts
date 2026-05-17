@@ -33,6 +33,7 @@ import { HeartbeatRunRepository } from "./HeartbeatRunRepository";
 import { HeartbeatPulseEngine, getSignalStrength, type HeartbeatPulseDecision } from "./HeartbeatPulseEngine";
 import { HeartbeatDispatchEngine } from "./HeartbeatDispatchEngine";
 import type { MemoryCaptureOptions } from "../memory/MemoryService";
+import { MemoryPressureService } from "../memory/MemoryPressureService";
 import { AutomationProfileRepository } from "./AutomationProfileRepository";
 import { CoreTraceService } from "../core/CoreTraceService";
 import { CoreMemoryCandidateService } from "../core/CoreMemoryCandidateService";
@@ -1042,12 +1043,20 @@ export class HeartbeatService extends EventEmitter {
       signal.signalFamily === "correction_learning" ||
       signal.signalFamily === "cross_workspace_patterns"
     ).length;
-    if (memorySignalCount === 0) return null;
+    let pressureInstructions = "";
+    try {
+      pressureInstructions = MemoryPressureService.buildCompactionInstructions(
+        MemoryPressureService.analyze(params.workspacePath),
+      );
+    } catch {
+      pressureInstructions = "";
+    }
+    if (memorySignalCount === 0 && !pressureInstructions) return null;
     try {
       return await this.deps.runMemoryDreaming({
         workspaceId: params.workspaceId,
         workspacePath: params.workspacePath,
-        reason: params.decision.reason,
+        reason: memorySignalCount > 0 ? params.decision.reason : "hot-memory pressure",
         signalCount: memorySignalCount,
         heartbeatRunId: params.heartbeatRunId,
       });
