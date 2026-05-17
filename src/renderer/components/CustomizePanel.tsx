@@ -29,6 +29,8 @@ interface PluginPackData {
   }[];
   state: string;
   enabled: boolean;
+  policyBlocked?: boolean;
+  policyRequired?: boolean;
   securityReport?: CapabilitySecurityReport;
 }
 
@@ -140,8 +142,9 @@ export function CustomizePanel({
         ),
       );
       window.dispatchEvent(new Event(MESSAGE_SHORTCUTS_UPDATED_EVENT));
-    } catch {
-      // Toggle failed
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update plugin pack");
     }
   };
 
@@ -159,8 +162,9 @@ export function CustomizePanel({
         ),
       );
       window.dispatchEvent(new Event(MESSAGE_SHORTCUTS_UPDATED_EVENT));
-    } catch {
-      // Skill toggle failed
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update plugin skill");
     }
   };
 
@@ -222,15 +226,18 @@ export function CustomizePanel({
       {/* Sidebar */}
       <div className="cp-sidebar">
         <div className="cp-sidebar-header">
-          <h3>Plugin Packs</h3>
+          <h3>Feature Packs</h3>
           <button
             className="cp-store-btn"
             onClick={() => setShowStore(true)}
-            title="Browse Plugin Store"
+            title="Browse plugin store"
           >
             +
           </button>
         </div>
+        <p className="cp-sidebar-note">
+          Enable bundled workflows like Legal, SMB, finance, and other domain packs.
+        </p>
 
         {/* Search */}
         <div className="cp-search-wrapper">
@@ -316,7 +323,7 @@ export function CustomizePanel({
         {bundledPacks.length > 0 && (
           <>
             <div className="cp-sidebar-group-header">
-              <span>Packs</span>
+              <span>Built-in packs</span>
             </div>
             {bundledPacks.map((p) => (
               <button
@@ -331,9 +338,12 @@ export function CustomizePanel({
                   {p.icon || <Package size={16} strokeWidth={1.5} />}
                 </span>
                 <span>{p.displayName}</span>
-                {packUpdates.has(p.name) && (
-                  <span className="cp-update-dot" title="Update available" />
-                )}
+                <span className="cp-pack-indicators">
+                  {!p.enabled && <span className="cp-disabled-dot" title="Disabled" />}
+                  {packUpdates.has(p.name) && (
+                    <span className="cp-update-dot" title="Update available" />
+                  )}
+                </span>
               </button>
             ))}
           </>
@@ -377,11 +387,24 @@ export function CustomizePanel({
                     <input
                       type="checkbox"
                       checked={activePack.enabled}
+                      disabled={activePack.policyBlocked || (activePack.policyRequired && activePack.enabled)}
                       onChange={(e) => handleToggle(activePack.name, e.target.checked)}
                     />
                     <span className="cp-toggle-slider" />
                   </label>
                 </div>
+              </div>
+              <div className="cp-pack-status-row">
+                <span className={`cp-pack-status ${activePack.enabled ? "enabled" : "disabled"}`}>
+                  {activePack.policyBlocked
+                    ? "Blocked by policy"
+                    : activePack.enabled
+                      ? "Enabled"
+                      : "Disabled"}
+                </span>
+                {activePack.policyRequired && (
+                  <span className="settings-badge">Required by policy</span>
+                )}
               </div>
               <p className="cp-detail-description">{activePack.description}</p>
               {getSecurityBadge(activePack.securityReport)}
@@ -639,30 +662,35 @@ export function CustomizePanel({
           display: flex;
           height: 100%;
           min-height: 0;
-          background: var(--color-bg-primary);
+          gap: 24px;
+          padding: 32px 40px;
+          background: transparent;
           color: var(--color-text-primary);
         }
 
         /* Search */
         .cp-search-wrapper {
           position: relative;
-          padding: 0 12px 8px;
+          padding: 0 14px 10px;
         }
 
         .cp-search-input {
           width: 100%;
-          padding: 6px 28px 6px 10px;
-          border: 1px solid var(--color-border-subtle);
-          border-radius: 6px;
-          background: var(--color-bg-secondary);
+          padding: 9px 30px 9px 12px;
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-md);
+          background: var(--color-bg-glass);
           color: var(--color-text-primary);
-          font-size: 12px;
+          font-size: 13px;
           outline: none;
           box-sizing: border-box;
+          transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
         }
 
         .cp-search-input:focus {
-          border-color: var(--color-accent, #22d3ee);
+          border-color: var(--color-accent);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 14%, transparent);
+          background: var(--color-bg-elevated);
         }
 
         .cp-search-input::placeholder {
@@ -689,29 +717,39 @@ export function CustomizePanel({
 
         /* Sidebar */
         .cp-sidebar {
-          width: 220px;
-          min-width: 220px;
-          border-right: 1px solid var(--color-border-subtle);
+          width: 280px;
+          min-width: 280px;
+          border: 1px solid var(--color-border-subtle);
+          border-radius: var(--radius-xl);
+          background: linear-gradient(135deg, var(--color-bg-elevated) 0%, var(--color-bg-glass) 100%);
+          box-shadow: var(--shadow-md);
           display: flex;
           flex-direction: column;
           overflow-y: auto;
-          padding: 12px 0;
+          padding: 18px 0;
+          scrollbar-width: none;
+        }
+
+        .cp-sidebar::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+          display: none;
         }
 
         .cp-sidebar-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 4px 16px 12px;
+          padding: 2px 18px 12px;
         }
 
         .cp-store-btn {
-          width: 24px;
-          height: 24px;
-          border: 1px solid var(--color-border-subtle);
-          border-radius: 6px;
-          background: none;
-          color: var(--color-text-muted);
+          width: 32px;
+          height: 32px;
+          border: 1px solid var(--color-border);
+          border-radius: 12px;
+          background: var(--color-bg-glass);
+          color: var(--color-text-secondary);
           font-size: 16px;
           line-height: 1;
           cursor: pointer;
@@ -722,16 +760,24 @@ export function CustomizePanel({
         }
 
         .cp-store-btn:hover {
-          color: var(--color-text-primary);
-          border-color: var(--color-border);
-          background: var(--color-bg-hover);
+          color: var(--color-accent);
+          border-color: var(--color-accent-subtle);
+          background: var(--color-accent-subtle);
+          transform: translateY(-1px);
         }
 
         .cp-sidebar-header h3 {
-          font-size: 14px;
+          font-size: 17px;
           font-weight: 600;
           margin: 0;
           color: var(--color-text-primary);
+        }
+
+        .cp-sidebar-note {
+          margin: -4px 18px 14px;
+          color: var(--color-text-muted);
+          font-size: 13px;
+          line-height: 1.45;
         }
 
         .cp-sidebar-section {
@@ -740,7 +786,7 @@ export function CustomizePanel({
         }
 
         .cp-sidebar-group-header {
-          padding: 12px 20px 4px;
+          padding: 16px 18px 8px;
           font-size: 11px;
           font-weight: 600;
           color: var(--color-text-muted);
@@ -753,37 +799,50 @@ export function CustomizePanel({
           align-items: center;
           justify-content: flex-start;
           gap: 10px;
-          padding: 7px 12px;
-          background: none;
-          border: none;
-          border-radius: 6px;
+          padding: 10px 12px;
+          background: transparent;
+          border: 1px solid transparent;
+          border-radius: 14px;
           color: var(--color-text-secondary);
           font-size: 13px;
-          line-height: 24px;
+          line-height: 20px;
           cursor: pointer;
           text-align: left;
-          margin: 1px 8px;
-          width: calc(100% - 16px);
+          margin: 2px 12px;
+          width: calc(100% - 24px);
+          transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease, color 0.18s ease;
         }
 
-        .cp-sidebar-item > span:last-child {
+        .cp-sidebar-item > span:nth-child(2) {
           flex: 1;
           min-width: 0;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          line-height: 24px;
+          line-height: 20px;
+        }
+
+        .cp-pack-indicators {
+          display: inline-flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 6px;
+          flex: 0 0 auto;
+          margin-left: auto;
         }
 
         .cp-sidebar-item:hover {
-          background: var(--color-bg-hover);
+          border-color: var(--color-border-light);
+          background: var(--color-bg-glass-hover);
           color: var(--color-text-primary);
+          transform: translateX(2px);
         }
 
         .cp-sidebar-item--active {
-          background: var(--color-bg-tertiary);
+          border-color: color-mix(in srgb, var(--color-accent) 42%, transparent);
+          background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent-subtle) 72%, transparent), var(--color-bg-glass));
           color: var(--color-text-primary);
-          font-weight: 500;
+          font-weight: 600;
         }
 
         .cp-sidebar-item--nav {
@@ -796,9 +855,12 @@ export function CustomizePanel({
           justify-content: center;
           font-size: 16px;
           line-height: 1;
-          width: 24px;
-          min-width: 24px;
-          height: 24px;
+          width: 26px;
+          min-width: 26px;
+          height: 26px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--color-accent-subtle) 62%, transparent);
+          color: var(--color-accent);
           flex-shrink: 0;
         }
 
@@ -806,8 +868,17 @@ export function CustomizePanel({
         .cp-detail {
           flex: 1;
           overflow-y: auto;
-          padding: 24px 32px;
+          padding: 8px 8px 24px;
           min-width: 0;
+          max-width: 1100px;
+          scrollbar-width: none;
+          animation: dp-fade-in 0.6s ease-out;
+        }
+
+        .cp-detail::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+          display: none;
         }
 
         .cp-empty {
@@ -822,7 +893,14 @@ export function CustomizePanel({
         }
 
         .cp-detail-header {
-          margin-bottom: 20px;
+          margin-bottom: 28px;
+          padding: 24px 28px 22px;
+          border: 1px solid var(--color-border-light);
+          border-radius: var(--radius-xl);
+          background: linear-gradient(135deg, var(--color-bg-elevated) 0%, color-mix(in srgb, var(--color-bg-elevated) 80%, var(--color-accent-subtle)) 100%);
+          box-shadow: var(--shadow-lg), var(--shadow-glow);
+          backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+          -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
         }
 
         .cp-detail-title-row {
@@ -833,16 +911,48 @@ export function CustomizePanel({
         }
 
         .cp-detail-title-row h2 {
-          font-size: 20px;
+          font-family: var(--font-ui);
+          font-size: 22px;
           font-weight: 600;
           margin: 0;
+          color: var(--color-text);
         }
 
         .cp-detail-description {
-          font-size: 14px;
+          font-size: 15px;
           color: var(--color-text-secondary);
-          margin: 0 0 8px;
-          line-height: 1.5;
+          margin: 0 0 16px;
+          line-height: 1.6;
+          max-width: 940px;
+        }
+
+        .cp-pack-status-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin: -2px 0 10px;
+        }
+
+        .cp-pack-status {
+          display: inline-flex;
+          align-items: center;
+          border-radius: 999px;
+          padding: 3px 9px;
+          font-size: 11px;
+          font-weight: 650;
+          border: 1px solid transparent;
+        }
+
+        .cp-pack-status.enabled {
+          color: var(--color-accent);
+          background: var(--color-accent-subtle);
+          border-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
+        }
+
+        .cp-pack-status.disabled {
+          color: var(--color-text-muted);
+          background: var(--color-bg-secondary);
+          border: 1px solid var(--color-border-subtle);
         }
 
         .cp-detail-twin-badge {
@@ -854,7 +964,8 @@ export function CustomizePanel({
           color: var(--color-accent);
           border-radius: 12px;
           font-size: 12px;
-          font-weight: 500;
+          font-weight: 600;
+          border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
         }
 
         .cp-detail-actions {
@@ -875,7 +986,7 @@ export function CustomizePanel({
         .cp-best-fit-badge {
           display: inline-flex;
           align-items: center;
-          padding: 2px 10px;
+          padding: 4px 10px;
           border-radius: 12px;
           font-size: 11px;
           font-weight: 600;
@@ -903,7 +1014,7 @@ export function CustomizePanel({
 
         /* Outcome examples */
         .cp-outcome-examples {
-          margin-top: 10px;
+          margin-top: 14px;
         }
 
         .cp-outcome-list {
@@ -913,7 +1024,7 @@ export function CustomizePanel({
         }
 
         .cp-outcome-item {
-          font-size: 12px;
+          font-size: 13px;
           color: var(--color-text-secondary);
           line-height: 1.6;
           margin-bottom: 2px;
@@ -925,11 +1036,11 @@ export function CustomizePanel({
           align-items: center;
           gap: 6px;
           flex-wrap: wrap;
-          margin-top: 8px;
+          margin-top: 14px;
         }
 
         .cp-rc-label {
-          font-size: 12px;
+          font-size: 13px;
           color: var(--color-text-muted);
           margin-right: 2px;
         }
@@ -938,10 +1049,10 @@ export function CustomizePanel({
           display: inline-flex;
           align-items: center;
           gap: 4px;
-          padding: 3px 10px;
+          padding: 6px 10px;
           border: 1px solid var(--color-border-subtle);
-          border-radius: 12px;
-          background: var(--color-bg-secondary);
+          border-radius: 999px;
+          background: var(--color-bg-glass);
           color: var(--color-text-secondary);
           font-size: 12px;
           cursor: pointer;
@@ -960,8 +1071,19 @@ export function CustomizePanel({
           height: 8px;
           border-radius: 50%;
           background: var(--color-warning, #f59e0b);
+          flex: 0 0 8px;
+          min-width: 8px;
           flex-shrink: 0;
-          margin-left: auto;
+        }
+
+        .cp-disabled-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: var(--color-text-muted);
+          flex: 0 0 8px;
+          min-width: 8px;
+          opacity: 0.7;
         }
 
         .cp-update-badge {
@@ -981,8 +1103,8 @@ export function CustomizePanel({
         .cp-toggle {
           position: relative;
           display: inline-block;
-          width: 36px;
-          height: 20px;
+          width: 44px;
+          height: 24px;
           cursor: pointer;
         }
 
@@ -996,15 +1118,15 @@ export function CustomizePanel({
           position: absolute;
           inset: 0;
           background: var(--color-bg-tertiary);
-          border-radius: 10px;
+          border-radius: 999px;
           transition: background 0.2s;
         }
 
         .cp-toggle-slider::before {
           content: "";
           position: absolute;
-          width: 16px;
-          height: 16px;
+          width: 20px;
+          height: 20px;
           left: 2px;
           top: 2px;
           background: white;
@@ -1017,36 +1139,45 @@ export function CustomizePanel({
         }
 
         .cp-toggle input:checked + .cp-toggle-slider::before {
-          transform: translateX(16px);
+          transform: translateX(20px);
+        }
+
+        .cp-toggle input:disabled + .cp-toggle-slider {
+          opacity: 0.55;
+          cursor: not-allowed;
         }
 
         /* Tabs */
         .cp-tabs {
           display: flex;
-          gap: 0;
-          border-bottom: 1px solid var(--color-border-subtle);
-          margin-bottom: 16px;
+          align-items: center;
+          gap: 8px;
+          border-bottom: none;
+          margin: 0 0 18px;
         }
 
         .cp-tab {
-          padding: 8px 16px;
-          background: none;
-          border: none;
-          border-bottom: 2px solid transparent;
+          padding: 8px 14px;
+          background: var(--color-bg-glass);
+          border: 1px solid var(--color-border-subtle);
+          border-radius: 999px;
           color: var(--color-text-muted);
           font-size: 13px;
-          font-weight: 500;
+          font-weight: 600;
           cursor: pointer;
           transition: all 0.15s;
         }
 
         .cp-tab:hover {
           color: var(--color-text-primary);
+          border-color: var(--color-border-light);
+          background: var(--color-bg-glass-hover);
         }
 
         .cp-tab--active {
-          color: var(--color-text-primary);
-          border-bottom-color: var(--color-text-primary);
+          color: var(--color-accent);
+          border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+          background: var(--color-accent-subtle);
         }
 
         .cp-tab-content {
@@ -1056,7 +1187,7 @@ export function CustomizePanel({
         .cp-tab-hint {
           font-size: 13px;
           color: var(--color-text-muted);
-          margin: 0 0 16px;
+          margin: 0 0 18px;
           line-height: 1.4;
         }
 
@@ -1069,52 +1200,79 @@ export function CustomizePanel({
         /* Command cards */
         .cp-command-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-          gap: 10px;
+          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+          gap: 14px;
         }
 
         .cp-command-card {
-          padding: 14px 16px;
+          min-height: 156px;
+          padding: 22px 24px;
           border: 1px solid var(--color-border-subtle);
-          border-radius: 8px;
-          background: var(--color-bg-secondary);
+          border-radius: var(--radius-lg);
+          background: linear-gradient(135deg, var(--color-bg-glass) 0%, var(--color-accent-subtle) 100%);
           cursor: default;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          gap: 18px;
+          position: relative;
+          overflow: hidden;
+          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .cp-command-card::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, transparent 50%);
+          pointer-events: none;
         }
 
         .cp-command-card:hover {
-          border-color: var(--color-border);
+          border-color: var(--color-accent-subtle);
+          background: linear-gradient(135deg, var(--color-bg-glass-hover) 0%, color-mix(in srgb, var(--color-accent-subtle) 80%, white 20%) 100%);
+          box-shadow: var(--shadow-lg), 0 10px 20px -10px color-mix(in srgb, var(--color-accent) 20%, transparent);
+          transform: translateY(-3px);
         }
 
         .cp-command-desc {
-          font-size: 13px;
+          font-size: 14px;
           color: var(--color-text-primary);
-          margin: 0 0 10px;
-          line-height: 1.4;
+          margin: 0;
+          line-height: 1.5;
         }
 
         .cp-command-name {
           font-size: 12px;
           color: var(--color-text-muted);
           font-family: var(--font-mono);
+          overflow-wrap: anywhere;
         }
 
         /* Skill list */
         .cp-skill-list {
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 12px;
         }
 
         .cp-skill-row {
-          display: flex;
+          display: grid;
+          grid-template-columns: 44px minmax(0, 1fr) auto;
           align-items: center;
-          gap: 10px;
-          padding: 10px 12px;
-          border-radius: 6px;
+          gap: 16px;
+          padding: 18px 20px;
+          border: 1px solid var(--color-border-subtle);
+          border-radius: var(--radius-lg);
+          background: linear-gradient(135deg, var(--color-bg-elevated) 0%, var(--color-bg-glass) 100%);
+          transition: all 0.25s ease;
         }
 
         .cp-skill-row:hover {
-          background: var(--color-bg-hover);
+          border-color: var(--color-accent-subtle);
+          background: linear-gradient(135deg, var(--color-bg-elevated) 0%, var(--color-bg-hover) 100%);
+          transform: translateX(4px);
+          box-shadow: var(--shadow-md);
         }
 
         .cp-skill-row--disabled {
@@ -1128,10 +1286,17 @@ export function CustomizePanel({
 
         .cp-skill-icon {
           font-size: 16px;
-          width: 20px;
-          text-align: center;
+          width: 44px;
+          height: 44px;
+          border-radius: var(--radius-lg);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--color-bg-glass);
+          border: 1px solid var(--color-border-subtle);
+          color: var(--color-accent);
+          box-shadow: var(--shadow-sm);
           flex-shrink: 0;
-          margin-top: 1px;
         }
 
         .cp-skill-info {
@@ -1142,47 +1307,62 @@ export function CustomizePanel({
         }
 
         .cp-skill-name {
-          font-size: 13px;
-          font-weight: 500;
+          font-size: 15px;
+          font-weight: 600;
           color: var(--color-text-primary);
         }
 
         .cp-skill-desc {
-          font-size: 12px;
+          font-size: 13px;
           color: var(--color-text-muted);
-          line-height: 1.3;
+          line-height: 1.45;
         }
 
         /* Agent list */
         .cp-agent-list {
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 12px;
         }
 
         .cp-agent-row,
         .cp-agent-twin {
-          display: flex;
+          display: grid;
+          grid-template-columns: 44px minmax(0, 1fr);
           align-items: flex-start;
-          gap: 10px;
-          padding: 10px 12px;
-          border-radius: 6px;
+          gap: 16px;
+          padding: 18px 20px;
+          border: 1px solid var(--color-border-subtle);
+          border-radius: var(--radius-lg);
+          background: linear-gradient(135deg, var(--color-bg-elevated) 0%, var(--color-bg-glass) 100%);
+          transition: all 0.25s ease;
         }
 
         .cp-agent-row:hover,
         .cp-agent-twin:hover {
-          background: var(--color-bg-hover);
+          border-color: var(--color-accent-subtle);
+          background: linear-gradient(135deg, var(--color-bg-elevated) 0%, var(--color-bg-hover) 100%);
+          transform: translateX(4px);
+          box-shadow: var(--shadow-md);
         }
 
         .cp-agent-twin {
-          border: 1px dashed var(--color-border-subtle);
-          background: var(--color-accent-subtle, rgba(34, 211, 238, 0.05));
+          border-style: dashed;
+          background: linear-gradient(135deg, var(--color-accent-subtle), var(--color-bg-glass));
         }
 
         .cp-agent-icon {
           font-size: 18px;
-          width: 24px;
-          text-align: center;
+          width: 44px;
+          height: 44px;
+          border-radius: var(--radius-lg);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--color-bg-glass);
+          border: 1px solid var(--color-border-subtle);
+          color: var(--color-accent);
+          box-shadow: var(--shadow-sm);
           flex-shrink: 0;
         }
 
@@ -1194,15 +1374,15 @@ export function CustomizePanel({
         }
 
         .cp-agent-name {
-          font-size: 13px;
-          font-weight: 500;
+          font-size: 15px;
+          font-weight: 600;
           color: var(--color-text-primary);
         }
 
         .cp-agent-desc {
-          font-size: 12px;
+          font-size: 13px;
           color: var(--color-text-muted);
-          line-height: 1.3;
+          line-height: 1.45;
         }
 
         /* Try asking section */
@@ -1259,6 +1439,75 @@ export function CustomizePanel({
 
         .cp-try-item:hover .cp-try-arrow {
           color: var(--color-accent);
+        }
+
+        @media (max-width: 980px) {
+          .cp-container {
+            flex-direction: column;
+            padding: 20px;
+            gap: 16px;
+          }
+
+          .cp-sidebar {
+            width: 100%;
+            min-width: 0;
+            max-height: 300px;
+          }
+
+          .cp-detail {
+            max-width: none;
+            padding: 0 0 20px;
+          }
+
+          .cp-command-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .cp-container {
+            padding: 12px;
+          }
+
+          .cp-detail-header {
+            padding: 20px;
+          }
+
+          .cp-detail-title-row,
+          .cp-pack-status-row,
+          .cp-recommended-connectors {
+            align-items: flex-start;
+          }
+
+          .cp-detail-title-row {
+            gap: 12px;
+          }
+
+          .cp-tabs {
+            overflow-x: auto;
+            padding-bottom: 2px;
+          }
+
+          .cp-skill-row {
+            grid-template-columns: 38px minmax(0, 1fr);
+          }
+
+          .cp-skill-toggle {
+            grid-column: 2;
+            justify-self: start;
+            margin-left: 0;
+          }
+
+          .cp-agent-row,
+          .cp-agent-twin {
+            grid-template-columns: 38px minmax(0, 1fr);
+          }
+
+          .cp-skill-icon,
+          .cp-agent-icon {
+            width: 38px;
+            height: 38px;
+          }
         }
       `}</style>
     </div>
