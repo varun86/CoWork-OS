@@ -89,6 +89,18 @@ describe("TaskPauseBanner", () => {
     expect(markup).not.toContain("user_action_required_failure");
   });
 
+  it("does not frame unknown pauses as decision check-ins", () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(TaskPauseBanner, {
+        message: "Paused - awaiting user input",
+      }),
+    );
+
+    expect(markup).toContain("Task paused.");
+    expect(markup).not.toContain("Quick check-in");
+    expect(markup).not.toContain("decision point");
+  });
+
   it("renders markdown formatting in the details content", () => {
     const markup = renderToStaticMarkup(
       React.createElement(TaskPauseBannerDetailsContent, {
