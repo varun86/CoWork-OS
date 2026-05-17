@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import type { Task, TaskEvent, Workspace } from "../../../shared/types";
 import {
@@ -11,17 +13,21 @@ import {
   deriveTaskHeaderPresentation,
   estimateTaskFeedRowHeight,
   extractGeneratedArtifactPathsFromText,
+  formatStepFailedTitleForDisplay,
+  formatTimelineErrorTitleForDisplay,
   getWorkspaceStatusFolderLabel,
   getInlinePreviewKindForGeneratedFile,
   getInlinePreviewKindForTaskEvent,
   getAutoScrollTargetTop,
   getBootstrapProgressTitle,
   getDefaultTranscriptMode,
+  getVisibleEndOfTaskArtifactCards,
   hasInactiveStringSetEntries,
   pruneStringSetToActiveIds,
   selectVisibleTaskFeedRows,
   shouldCreateFreshTaskForSend,
   shouldRenderOpenArtifactCardAtEvent,
+  shouldSuppressInitialPromptUserEvent,
   shouldShowBootstrapProgressRow,
   shouldScheduleAutoScrollWrite,
   TaskAutomationModal,
@@ -32,6 +38,9 @@ import {
   buildTaskAutomationSchedule,
   TASK_AUTOMATION_TEMPLATES,
 } from "../task-automation-utils";
+
+const mainContentPath = fileURLToPath(new URL("../MainContent.tsx", import.meta.url));
+const appPath = fileURLToPath(new URL("../../App.tsx", import.meta.url));
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -47,6 +56,49 @@ describe("shouldCreateFreshTaskForSend", () => {
         forceFreshTask: true,
       }),
     ).toBe(true);
+  });
+});
+
+describe("formatStepFailedTitleForDisplay", () => {
+  it("uses a concise title when the failure reason duplicates the step description", () => {
+    expect(
+      formatStepFailedTitleForDisplay({
+        step: { description: "Unable to access workspace path." },
+        reason: "Unable to access workspace path.",
+      }),
+    ).toBe("Step failed");
+  });
+
+  it("summarizes completion guard failures instead of echoing the full detail", () => {
+    expect(
+      formatStepFailedTitleForDisplay({
+        step: {
+          description:
+            "Task missing verification evidence: no completed review/verification step or review-backed conclusion was detected.",
+        },
+        reason:
+          "Task missing verification evidence: no completed review/verification step or review-backed conclusion was detected.",
+      }),
+    ).toBe("Verification evidence missing");
+  });
+
+  it("keeps useful step context when the reason adds new detail", () => {
+    expect(
+      formatStepFailedTitleForDisplay({
+        step: { description: "Run the browser QA pass and capture screenshots" },
+        reason: "Playwright timed out waiting for localhost.",
+      }),
+    ).toBe("Step failed: Run the browser QA pass and capture screenshots");
+  });
+});
+
+describe("formatTimelineErrorTitleForDisplay", () => {
+  it("summarizes wrapped completion guard errors", () => {
+    expect(
+      formatTimelineErrorTitleForDisplay(
+        "Task execution failed: Error: Task missing verification evidence: no completed review/verification step or review-backed conclusion was detected.",
+      ),
+    ).toBe("Verification evidence missing");
   });
 });
 
@@ -110,6 +162,52 @@ describe("getWorkspaceStatusFolderLabel", () => {
   it("keeps temp and missing workspace fallbacks", () => {
     expect(getWorkspaceStatusFolderLabel(makeWorkspace({ isTemp: true }))).toBe("Work in a folder");
     expect(getWorkspaceStatusFolderLabel(null)).toBe("No folder selected");
+  });
+});
+
+describe("shouldSuppressInitialPromptUserEvent", () => {
+  const initialPrompt = "Research and compare two GitHub repositories.\nStep 1: collect stats.";
+
+  it("suppresses a timeline v2 user_message that repeats the anchored task prompt", () => {
+    const event = makeEvent(
+      "user-event",
+      11_000,
+      "timeline_step_updated",
+      {
+        legacyType: "user_message",
+        message: initialPrompt,
+      },
+    );
+
+    expect(
+      shouldSuppressInitialPromptUserEvent({
+        event,
+        initialPromptEventId: null,
+        trimmedPrompt: initialPrompt,
+        taskCreatedAt: 10_000,
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps later follow-up messages even when they happen to repeat the original prompt", () => {
+    const event = makeEvent(
+      "follow-up",
+      90_000,
+      "timeline_step_updated",
+      {
+        legacyType: "user_message",
+        message: initialPrompt,
+      },
+    );
+
+    expect(
+      shouldSuppressInitialPromptUserEvent({
+        event,
+        initialPromptEventId: null,
+        trimmedPrompt: initialPrompt,
+        taskCreatedAt: 10_000,
+      }),
+    ).toBe(false);
   });
 });
 
@@ -203,6 +301,29 @@ describe("task automation creation", () => {
   });
 });
 
+describe("task header browser action", () => {
+  it("wires the task menu Open browser action to the sidebar Browser Workbench", () => {
+    const mainContentSource = readFileSync(mainContentPath, "utf8");
+    const appSource = readFileSync(appPath, "utf8");
+
+    expect(mainContentSource).toContain("<span>Open browser</span>");
+    expect(mainContentSource).toContain("onOpenBrowserWorkbenchSidebar()");
+    expect(appSource).toContain("openEmptyBrowserWorkbenchSidebar");
+    expect(appSource).toContain("sessionId: \"default\"");
+    expect(appSource).toContain("onOpenBrowserWorkbenchSidebar=");
+  });
+});
+
+describe("artifact sidebar open behavior", () => {
+  it("keeps lazy artifact viewers inside a local sidebar suspense boundary", () => {
+    const appSource = readFileSync(appPath, "utf8");
+
+    expect(appSource).toContain("function ArtifactSidebarFallback()");
+    expect(appSource).toContain("<Suspense fallback={<ArtifactSidebarFallback />}>");
+    expect(appSource).toContain("onRevealRightSidebar?.();");
+  });
+});
+
 describe("isTaskActivelyWorking", () => {
   it("composes uploaded PDF prompts with path and parse_document guidance", async () => {
     const readFileForViewer = vi.fn().mockResolvedValue({
@@ -280,9 +401,14 @@ describe("isTaskActivelyWorking", () => {
   it("extracts generated office artifact paths from assistant text", () => {
     expect(
       extractGeneratedArtifactPathsFromText(
-        "Validated:\n- File: `artifacts/sample_presentation.pptx`\n- Also saved reports/summary.docx and sample.xlsx.",
+        "Validated:\n- File: `artifacts/sample_presentation.pptx`\n- Also saved reports/summary.docx, docs/channels.md, and sample.xlsx.",
       ),
-    ).toEqual(["artifacts/sample_presentation.pptx", "reports/summary.docx", "sample.xlsx"]);
+    ).toEqual([
+      "artifacts/sample_presentation.pptx",
+      "reports/summary.docx",
+      "docs/channels.md",
+      "sample.xlsx",
+    ]);
   });
 
   it("does not promote remote office links as local artifact cards", () => {
@@ -374,6 +500,45 @@ describe("isTaskActivelyWorking", () => {
         lastReferenceTimestamp: 200,
       },
     ]);
+  });
+
+  it("collects markdown artifacts as document cards for bottom rendering", () => {
+    const created = makeEvent("created", 100, "file_created", {
+      path: "docs/channels.md",
+      mimeType: "text/markdown",
+    });
+    const assistant = makeEvent("assistant", 200, "assistant_message", {
+      message: "Done: docs/channels.md",
+    });
+
+    expect(collectLatestEndOfTaskArtifactCards([created, assistant])).toEqual([
+      {
+        path: "docs/channels.md",
+        kind: "document",
+        eventId: "assistant",
+        lastReferenceIndex: 1,
+        lastReferenceTimestamp: 200,
+      },
+    ]);
+  });
+
+  it("limits generated artifact stacks to five cards until expanded", () => {
+    const artifacts = Array.from({ length: 7 }, (_, index) => ({
+      path: `artifacts/output-${index + 1}.md`,
+      kind: "document" as const,
+      eventId: `event-${index + 1}`,
+      lastReferenceIndex: index,
+      lastReferenceTimestamp: 100 + index,
+    }));
+
+    expect(getVisibleEndOfTaskArtifactCards(artifacts, false)).toEqual({
+      visibleArtifacts: artifacts.slice(0, 5),
+      hiddenCount: 2,
+    });
+    expect(getVisibleEndOfTaskArtifactCards(artifacts, true)).toEqual({
+      visibleArtifacts: artifacts,
+      hiddenCount: 0,
+    });
   });
 
   it("collapses matching artifact filenames to one bottom card", () => {
