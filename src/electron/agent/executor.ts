@@ -93,6 +93,7 @@ import {
 } from "./runtime/SessionRuntime";
 import { defaultStepLoopBudget, type LoopBudgetStopReason } from "./runtime/LoopBudgetPolicy";
 import { createTerminalState, type TerminalState } from "./runtime/TerminalState";
+import type { TaskStrategySnapshot } from "./strategy/TaskStrategySnapshot";
 import type {
   TurnKernelIterationState,
   TurnKernelPolicy,
@@ -22071,6 +22072,11 @@ You are continuing a previous conversation. The context from the previous conver
   }
 
   private shouldEmitAnswerFirst(): boolean {
+    const directResponseMode = this.getTaskStrategySnapshot()?.directResponseMode;
+    if (directResponseMode === "terminal_quick_answer") return true;
+    if (directResponseMode === "brief_status_then_execute" || directResponseMode === "companion") {
+      return false;
+    }
     return /\banswer_first=true\b/i.test(String(this.task?.prompt || ""));
   }
 
@@ -22079,7 +22085,17 @@ You are continuing a previous conversation. The context from the previous conver
   }
 
   private shouldEmitPreflight(): boolean {
+    const snapshot = this.getTaskStrategySnapshot();
+    if (snapshot) {
+      return snapshot.preflightGates.includes("preflight_framing");
+    }
     return this.task.agentConfig?.preflightRequired === true;
+  }
+
+  private getTaskStrategySnapshot(): TaskStrategySnapshot | undefined {
+    const snapshot = (this.task.agentConfig as Any)?.taskStrategySnapshot;
+    if (!snapshot || typeof snapshot !== "object") return undefined;
+    return snapshot as TaskStrategySnapshot;
   }
 
   private hasDirectAnswerReady(): boolean {
