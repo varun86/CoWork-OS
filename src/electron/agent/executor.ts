@@ -4204,6 +4204,7 @@ export class TaskExecutor {
 
   private shouldHandleInitialPromptAsCompanion(prompt: string): boolean {
     if (this.shouldUseReadOnlyPdfAttachmentMode()) return false;
+    if (this.isAcpxExternalRuntimeTask()) return false;
     if (this.isExplicitChatExecutionMode()) return true;
 
     const agentConfig = this.task.agentConfig;
@@ -4222,7 +4223,6 @@ export class TaskExecutor {
 
     const text = String(prompt || this.getContractPrompt() || "").trim();
     if (!text) return false;
-    if (this.isAcpxExternalRuntimeTask()) return false;
     if (this.promptRequiresLiveLookup(text)) return false;
     if (this.promptHasExecutorRoutingCue(text)) return false;
     return this.isClearlyTrivialCompanionPrompt(text);
@@ -4251,6 +4251,8 @@ export class TaskExecutor {
       .trim()
       .toLowerCase();
     if (!normalized) return false;
+    // Routing boundary: keep this denylist aligned with executor entrypoints that must
+    // run before companion short-circuiting (slash commands, runtimes, skills, attachments).
     if (/^\s*\/[\w-]+/.test(prompt)) return true;
     if (/\banswer_first\s*=/.test(normalized)) return true;
     if (/\b(?:skill|codex\s+cli\s+agent|claude\s+code|acpx)\b/.test(normalized)) return true;
@@ -22388,6 +22390,15 @@ You are continuing a previous conversation. The context from the previous conver
 
       // Companion turns are text-only and should not enter native planning/tool execution.
       if (this.shouldHandleInitialPromptAsCompanion(initialPrompt)) {
+        this.emitEvent("log", {
+          message: "Routing initial prompt through companion mode before planning.",
+          reason: "initial_companion_prompt",
+          explicitChat: this.isExplicitChatExecutionMode(),
+          executionMode: this.task.agentConfig?.executionMode,
+          executionModeSource: this.task.agentConfig?.executionModeSource,
+          conversationMode: this.task.agentConfig?.conversationMode,
+          taskIntent: this.task.agentConfig?.taskIntent,
+        });
         await this.handleCompanionPrompt();
         return;
       }
