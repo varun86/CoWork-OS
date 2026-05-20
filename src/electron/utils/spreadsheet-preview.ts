@@ -73,9 +73,14 @@ export async function buildSpreadsheetPreviewFromFile(
   await workbook.xlsx.readFile(filePath);
 
   const sheets = workbook.worksheets.map((worksheet) => {
-    const rowCount = Math.min(worksheet.actualRowCount || worksheet.rowCount || 0, MAX_PREVIEW_ROWS);
+    const sourceRowCount = Math.max(worksheet.actualRowCount || 0, worksheet.rowCount || 0);
+    const sourceColumnCount = Math.max(
+      worksheet.actualColumnCount || 0,
+      worksheet.columnCount || 0,
+    );
+    const rowCount = Math.min(sourceRowCount, MAX_PREVIEW_ROWS);
     const columnCount = Math.min(
-      worksheet.actualColumnCount || worksheet.columnCount || 0,
+      sourceColumnCount,
       MAX_PREVIEW_COLUMNS,
     );
     const columnWidths = Array.from({ length: columnCount }, (_, index) => {
@@ -119,6 +124,8 @@ export async function buildSpreadsheetPreviewFromFile(
       columnCount,
       columnWidths,
       rows,
+      sourceRowCount,
+      truncated: sourceRowCount > rowCount || sourceColumnCount > columnCount,
     };
   });
 
