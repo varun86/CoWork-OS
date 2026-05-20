@@ -90,6 +90,8 @@ export class CronTools {
     name: string;
     description?: string;
     prompt: string;
+    target?: "new_task" | "current_thread" | "task";
+    targetTaskId?: string;
     schedule: {
       type: "once" | "interval" | "cron";
       // For 'once': timestamp in ISO format or milliseconds
@@ -124,17 +126,20 @@ export class CronTools {
     if (!service) {
       return { success: false, error: "Scheduler service is not running" };
     }
+    if (params.target === "task" && !params.targetTaskId?.trim()) {
+      return { success: false, error: 'targetTaskId is required when target is "task"' };
+    }
 
     // Parse the schedule into CronSchedule format
     let schedule: CronSchedule;
     try {
       schedule = this.parseSchedule(params.schedule);
-    } catch (error: Any) {
+    } catch (error) {
       this.daemon.logEvent(this.taskId, "tool_error", {
         tool: "schedule_create",
-        error: error.message,
+        error: (error as Error).message,
       });
-      return { success: false, error: error.message };
+      return { success: false, error: (error as Error).message };
     }
 
     // Create the job
@@ -147,6 +152,24 @@ export class CronTools {
       workspaceId: this.workspace.id,
       taskPrompt: params.prompt,
       taskTitle: params.name,
+      runMode:
+        params.target === "current_thread" || params.target === "task"
+          ? "thread_follow_up"
+          : "new_task",
+      targetTaskId:
+        params.target === "current_thread"
+          ? this.taskId
+          : params.target === "task"
+            ? params.targetTaskId
+            : undefined,
+      threadAutomation:
+        params.target === "current_thread" || params.target === "task"
+          ? {
+              sourceTaskId: params.target === "current_thread" ? this.taskId : params.targetTaskId,
+              wakeObjective: params.prompt,
+              includeContextBrief: true,
+            }
+          : undefined,
       delivery: params.delivery
         ? {
             enabled: params.delivery.enabled,
@@ -207,6 +230,8 @@ export class CronTools {
         summaryOnly?: boolean;
         deliverOnlyIfResult?: boolean;
       };
+      target?: "new_task" | "current_thread" | "task";
+      targetTaskId?: string;
     };
   }): Promise<{ success: boolean; job?: CronJob; error?: string }> {
     this.daemon.logEvent(this.taskId, "tool_call", {
@@ -245,12 +270,32 @@ export class CronTools {
     if (params.updates.description) patch.description = params.updates.description;
     if (params.updates.prompt) patch.taskPrompt = params.updates.prompt;
     if (params.updates.enabled !== undefined) patch.enabled = params.updates.enabled;
+    if (params.updates.target) {
+      if (params.updates.target === "new_task") {
+        patch.runMode = "new_task";
+        patch.targetTaskId = undefined;
+        patch.threadAutomation = undefined;
+      } else {
+        const targetTaskId =
+          params.updates.target === "current_thread" ? this.taskId : params.updates.targetTaskId;
+        if (!targetTaskId?.trim()) {
+          return { success: false, error: 'targetTaskId is required when target is "task"' };
+        }
+        patch.runMode = "thread_follow_up";
+        patch.targetTaskId = targetTaskId;
+        patch.threadAutomation = {
+          sourceTaskId: targetTaskId,
+          wakeObjective: params.updates.prompt,
+          includeContextBrief: true,
+        };
+      }
+    }
 
     if (params.updates.schedule) {
       try {
         patch.schedule = this.parseSchedule(params.updates.schedule);
-      } catch (error: Any) {
-        return { success: false, error: error.message };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
       }
     }
 
@@ -604,6 +649,17 @@ export class CronTools {
               type: "string",
               description: "The task prompt that will be executed when the schedule triggers",
             },
+            target: {
+              type: "string",
+              enum: ["new_task", "current_thread", "task"],
+              description:
+                "Where the scheduled work should run. Use current_thread when the user asks to return to this conversation, continue here, remind me here, or carry this task forward. Use new_task for standalone recurring work.",
+            },
+            targetTaskId: {
+              type: "string",
+              description:
+                'Required when target is "task". Omit for current_thread; the current task will be used.',
+            },
             schedule: {
               type: "object",
               description: "Schedule configuration",
@@ -747,6 +803,16 @@ export class CronTools {
                     deliverOnlyIfResult: { type: "boolean" },
                   },
                 },
+                target: {
+                  type: "string",
+                  enum: ["new_task", "current_thread", "task"],
+                  description:
+                    "Change where the schedule runs. current_thread continues this conversation; new_task restores standalone scheduled task creation.",
+                },
+                targetTaskId: {
+                  type: "string",
+                  description: 'Required when updates.target is "task".',
+                },
               },
             },
           },
@@ -764,6 +830,8 @@ export class CronTools {
     name?: string;
     description?: string;
     prompt?: string;
+    target?: "new_task" | "current_thread" | "task";
+    targetTaskId?: string;
     schedule?: {
       type: "once" | "interval" | "cron";
       at?: string | number;
@@ -807,6 +875,8 @@ export class CronTools {
         summaryOnly?: boolean;
         deliverOnlyIfResult?: boolean;
       };
+      target?: "new_task" | "current_thread" | "task";
+      targetTaskId?: string;
     };
   }): Promise<Any> {
     switch (input.action) {
@@ -824,6 +894,8 @@ export class CronTools {
           name: input.name,
           description: input.description,
           prompt: input.prompt,
+          target: input.target,
+          targetTaskId: input.targetTaskId,
           schedule: input.schedule,
           enabled: input.enabled,
           deleteAfterRun: input.deleteAfterRun,
