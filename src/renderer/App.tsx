@@ -68,7 +68,6 @@ import {
   IntegrationMentionSelection,
 } from "../shared/types";
 import { TASK_EVENT_STATUS_MAP } from "../shared/task-event-status-map";
-import { applyPersistedLanguage } from "./i18n";
 import { getEffectiveTaskEventType } from "./utils/task-event-compat";
 import { isLlmRequestCancelledEvent } from "./utils/task-event-visibility";
 import { invalidateGlobalMeasurer } from "./utils/pretext-adapter";
@@ -611,6 +610,8 @@ type SelectedTaskWorkspaceViewProps = {
   availableModels: LLMModelInfo[];
   availableProviders: LLMProviderInfo[];
   uiDensity: UiDensity;
+  homeResearchVaultEnabled: boolean;
+  homeNextActionsEnabled: boolean;
   rendererPerfLoggingEnabled: boolean;
   effectiveRightCollapsed: boolean;
   browserWorkbenchRequest: BrowserWorkbenchOpenRequest | null;
@@ -620,6 +621,8 @@ type SelectedTaskWorkspaceViewProps = {
     events: TaskEvent[];
     sharedTaskEventUi: SharedTaskEventUiState | null;
     hasActiveChildren: boolean;
+    childTasks: Task[];
+    childEvents: TaskEvent[];
     runningTasks: Task[];
     queuedTasks: Task[];
     queueStatus: QueueStatus | null;
@@ -719,6 +722,8 @@ const SelectedTaskWorkspaceView = memo(function SelectedTaskWorkspaceView({
   availableModels,
   availableProviders,
   uiDensity,
+  homeResearchVaultEnabled,
+  homeNextActionsEnabled,
   rendererPerfLoggingEnabled,
   effectiveRightCollapsed,
   browserWorkbenchRequest,
@@ -1294,6 +1299,7 @@ const SelectedTaskWorkspaceView = memo(function SelectedTaskWorkspaceView({
         isSpreadsheetResizing ? "is-resizing" : ""
       }`}
     >
+      <div className="selected-workspace-main-row">
       <Suspense fallback={<TaskViewSkeleton />}>
         <MainContent
           task={task}
@@ -1332,6 +1338,8 @@ const SelectedTaskWorkspaceView = memo(function SelectedTaskWorkspaceView({
           onModelChange={onModelChange}
           availableProviders={availableProviders}
           uiDensity={uiDensity}
+          homeResearchVaultEnabled={homeResearchVaultEnabled}
+          homeNextActionsEnabled={homeNextActionsEnabled}
           rendererPerfLoggingEnabled={rendererPerfLoggingEnabled}
           remoteSession={
             remoteTaskView
@@ -1463,6 +1471,8 @@ const SelectedTaskWorkspaceView = memo(function SelectedTaskWorkspaceView({
             events={rightPanelInput.events}
             sharedTaskEventUi={rightPanelInput.sharedTaskEventUi}
             hasActiveChildren={rightPanelInput.hasActiveChildren}
+            childTasks={rightPanelInput.childTasks}
+            childEvents={rightPanelInput.childEvents}
             runningTasks={rightPanelInput.runningTasks}
             queuedTasks={rightPanelInput.queuedTasks}
             queueStatus={rightPanelInput.queueStatus}
@@ -1474,6 +1484,7 @@ const SelectedTaskWorkspaceView = memo(function SelectedTaskWorkspaceView({
           />
         </Suspense>
       ) : null}
+      </div>
     </div>
   );
 }, (prev, next) =>
@@ -1496,6 +1507,8 @@ const SelectedTaskWorkspaceView = memo(function SelectedTaskWorkspaceView({
   prev.availableModels === next.availableModels &&
   prev.availableProviders === next.availableProviders &&
   prev.uiDensity === next.uiDensity &&
+  prev.homeResearchVaultEnabled === next.homeResearchVaultEnabled &&
+  prev.homeNextActionsEnabled === next.homeNextActionsEnabled &&
   prev.rendererPerfLoggingEnabled === next.rendererPerfLoggingEnabled &&
   prev.effectiveRightCollapsed === next.effectiveRightCollapsed &&
   prev.browserWorkbenchRequest?.requestId === next.browserWorkbenchRequest?.requestId &&
@@ -1503,6 +1516,7 @@ const SelectedTaskWorkspaceView = memo(function SelectedTaskWorkspaceView({
 );
 
 const MAX_RENDERER_TASK_EVENTS = 600;
+const MAX_RENDERER_CHILD_EVENTS = 300;
 const APPROVAL_TOAST_PREFIX = "approval-request-";
 const RENDERER_NOISE_EVENT_TYPES = new Set([
   "log",
@@ -1575,17 +1589,17 @@ function getLatestEventTimestamp(events: TaskEvent[]): number {
   return latest;
 }
 
-function capTaskEvents(events: TaskEvent[]): TaskEvent[] {
-  if (events.length <= MAX_RENDERER_TASK_EVENTS) return events;
+function capTaskEvents(events: TaskEvent[], maxEvents: number = MAX_RENDERER_TASK_EVENTS): TaskEvent[] {
+  if (events.length <= maxEvents) return events;
 
   const indexed = events.map((event, index) => ({ event, index }));
   const structural = indexed.filter(({ event }) => !isRendererNoiseEvent(event));
 
-  if (structural.length >= MAX_RENDERER_TASK_EVENTS) {
-    return structural.slice(-MAX_RENDERER_TASK_EVENTS).map(({ event }) => event);
+  if (structural.length >= maxEvents) {
+    return structural.slice(-maxEvents).map(({ event }) => event);
   }
 
-  const noiseBudget = MAX_RENDERER_TASK_EVENTS - structural.length;
+  const noiseBudget = maxEvents - structural.length;
   const recentNoise = indexed
     .filter(({ event }) => isRendererNoiseEvent(event))
     .slice(-noiseBudget);
@@ -1875,7 +1889,7 @@ export function App() {
       const matched = pendingChildEventsRef.current.filter((e) => newIds.has(e.taskId));
       pendingChildEventsRef.current = pendingChildEventsRef.current.filter((e) => !newIds.has(e.taskId));
       if (matched.length > 0) {
-        setChildEvents((prev) => mergeUniqueTaskEvents(prev, matched));
+        setChildEvents((prev) => capTaskEvents(mergeUniqueTaskEvents(prev, matched), MAX_RENDERER_CHILD_EVENTS));
       }
     }
   }, [childTasks]);
@@ -1892,7 +1906,6 @@ export function App() {
 
   // Update notification state
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const [updateDismissed, setUpdateDismissed] = useState(false);
 
   // Theme state (loaded from main process on mount)
   const [themeMode, setThemeMode] = useState<ThemeMode>("dark");
@@ -1901,6 +1914,8 @@ export function App() {
   const [transparencyEffectsEnabled, setTransparencyEffectsEnabled] = useState(true);
   const [uiDensity, setUiDensity] = useState<UiDensity>("focused");
   const [devRunLoggingEnabled, setDevRunLoggingEnabled] = useState(false);
+  const [homeResearchVaultEnabled, setHomeResearchVaultEnabled] = useState(false);
+  const [homeNextActionsEnabled, setHomeNextActionsEnabled] = useState(false);
 
   // Queue state
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
@@ -1954,6 +1969,20 @@ export function App() {
   const latestAttentionEventByTaskIdRef = useRef<Map<string, TaskEvent>>(new Map());
   /** Tracks output paths we've already shown completion toast for (suppresses repeat toasts on follow-ups) */
   const completionToastNotifiedPathsRef = useRef<Map<string, Set<string>>>(new Map());
+
+  // Purge stale entries from growing Map refs when the task list changes
+  useEffect(() => {
+    const activeIds = new Set(tasks.map(t => t.id));
+    for (const key of latestAttentionEventByTaskIdRef.current.keys()) {
+      if (!activeIds.has(key)) latestAttentionEventByTaskIdRef.current.delete(key);
+    }
+    for (const key of taskLastEventTimestampRef.current.keys()) {
+      if (!activeIds.has(key)) taskLastEventTimestampRef.current.delete(key);
+    }
+    for (const key of completionToastNotifiedPathsRef.current.keys()) {
+      if (!activeIds.has(key)) completionToastNotifiedPathsRef.current.delete(key);
+    }
+  }, [tasks]);
 
   // Disclaimer state (null = loading)
   const [disclaimerAccepted, setDisclaimerAccepted] = useState<boolean | null>(null);
@@ -2204,7 +2233,8 @@ export function App() {
         setTransparencyEffectsEnabled(settings.transparencyEffectsEnabled !== false);
         setUiDensity(settings.uiDensity || "focused");
         setDevRunLoggingEnabled(settings.devRunLoggingEnabled === true);
-        applyPersistedLanguage(settings.language);
+        setHomeResearchVaultEnabled(settings.homeResearchVaultEnabled === true);
+        setHomeNextActionsEnabled(settings.homeNextActionsEnabled === true);
         setDisclaimerAccepted(settings.disclaimerAccepted ?? false);
         setOnboardingCompleted(settings.onboardingCompleted ?? false);
         setOnboardingCompletedAt(settings.onboardingCompletedAt);
@@ -3285,7 +3315,7 @@ export function App() {
       // Capture events from dispatched child tasks for DispatchedAgentsPanel / CliAgentFrame
       if (!isSelectedTask && event.type !== "llm_streaming" && event.type !== "llm_usage") {
         if (childTaskIdsRef.current.has(event.taskId)) {
-          setChildEvents((prev) => mergeUniqueTaskEvents(prev, [rawEvent]));
+          setChildEvents((prev) => capTaskEvents(mergeUniqueTaskEvents(prev, [rawEvent]), MAX_RENDERER_CHILD_EVENTS));
         } else if (event.type === "task_created" || event.type === "step_started" || event.type === "tool_call" || event.type === "command_output" || event.type === "progress_update" || event.type === "assistant_message") {
           // Buffer events from unknown task IDs — they may be from a just-spawned child
           // whose task_created event hasn't been processed yet (race condition)
@@ -3397,6 +3427,9 @@ export function App() {
     if (!selectedTaskId || !window.electronAPI?.getTask) return;
     if (remoteTaskView) return;
 
+    const currentTask = tasksRef.current.find(t => t.id === selectedTaskId);
+    if (!currentTask || isTerminalTaskStatus(currentTask.status)) return;
+
     let cancelled = false;
 
     const reconcileStaleSelectedTask = async () => {
@@ -3490,7 +3523,7 @@ export function App() {
           allEvents.push(...evts);
         }
         allEvents.sort((a, b) => a.timestamp - b.timestamp);
-        setChildEvents(mergeUniqueTaskEvents([], allEvents));
+        setChildEvents(capTaskEvents(mergeUniqueTaskEvents([], allEvents), MAX_RENDERER_CHILD_EVENTS));
       } catch (error) {
         console.error("Failed to load child task events:", error);
       }
@@ -3506,6 +3539,13 @@ export function App() {
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     if (hasExecutingChildren) {
       pollTimer = setInterval(() => {
+        const currentChildren = tasksRef.current.filter(
+          (t) => t.parentTaskId === selectedTaskIdRef.current && t.agentType === "sub"
+        );
+        if (!currentChildren.some(t => t.status === "executing" || t.status === "planning")) {
+          if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+          return;
+        }
         loadChildHistoricalEvents();
       }, 5_000);
     }
@@ -3534,7 +3574,7 @@ export function App() {
   const isLoadingMoreRef = useRef(false);
   const hasMoreTasksRef = useRef(false);
 
-  const loadTasks = async () => {
+  const loadTasks = useCallback(async () => {
     setIsInitialTaskListLoading(true);
     if (!window.electronAPI?.listTasks) {
       setTasks([]);
@@ -3563,7 +3603,7 @@ export function App() {
     } finally {
       setIsInitialTaskListLoading(false);
     }
-  };
+  }, []);
 
   const loadMoreTasks = useCallback(async () => {
     if (!window.electronAPI?.listTasks || isLoadingMoreRef.current || !hasMoreTasksRef.current) {
@@ -3987,6 +4027,8 @@ export function App() {
       events: rightPanelEvents,
       sharedTaskEventUi: rightPanelSharedTaskEventUi,
       hasActiveChildren: replayControls.isReplayMode ? false : rightPanelHasActiveChildren,
+      childTasks: replayControls.isReplayMode ? [] : rightPanelChildTasks,
+      childEvents: replayControls.isReplayMode ? [] : childEvents,
       runningTasks: replayControls.isReplayMode ? [] : rightPanelRunningTasks,
       queuedTasks: replayControls.isReplayMode ? [] : rightPanelQueuedTasks,
       queueStatus: replayControls.isReplayMode ? null : queueStatus,
@@ -3999,10 +4041,12 @@ export function App() {
       rightPanelHasActiveChildren,
       rightPanelHighlightPath,
       rightPanelEvents,
+      rightPanelChildTasks,
       rightPanelQueuedTasks,
       rightPanelReplayTask,
       rightPanelRunningTasks,
       rightPanelSharedTaskEventUi,
+      childEvents,
     ],
   );
   const deferredRightPanelInput = useDeferredValue(rightPanelInput);
@@ -4374,6 +4418,20 @@ export function App() {
     setDevRunLoggingEnabled(enabled);
     void window.electronAPI?.saveAppearanceSettings?.({
       devRunLoggingEnabled: enabled,
+    });
+  };
+
+  const handleHomeResearchVaultEnabledChange = (enabled: boolean) => {
+    setHomeResearchVaultEnabled(enabled);
+    void window.electronAPI?.saveAppearanceSettings?.({
+      homeResearchVaultEnabled: enabled,
+    });
+  };
+
+  const handleHomeNextActionsEnabledChange = (enabled: boolean) => {
+    setHomeNextActionsEnabled(enabled);
+    void window.electronAPI?.saveAppearanceSettings?.({
+      homeNextActionsEnabled: enabled,
     });
   };
 
@@ -4875,12 +4933,10 @@ export function App() {
                 hasMoreTasks={hasMoreTasks}
                 uiDensity={uiDensity}
                 updateInfo={updateInfo}
-                updateDismissed={updateDismissed}
                 onViewUpdate={() => {
                   setSettingsTab("updates");
                   setCurrentView("settings");
                 }}
-                onDismissUpdate={() => setUpdateDismissed(true)}
               />
             )}
             <Suspense
@@ -5096,6 +5152,8 @@ export function App() {
                 availableModels={availableModels}
                 availableProviders={availableProviders}
                 uiDensity={uiDensity}
+                homeResearchVaultEnabled={homeResearchVaultEnabled}
+                homeNextActionsEnabled={homeNextActionsEnabled}
                 rendererPerfLoggingEnabled={rendererPerfLoggingEnabled}
                 effectiveRightCollapsed={effectiveRightCollapsed}
                 browserWorkbenchRequest={browserWorkbenchRequest}
@@ -5206,6 +5264,10 @@ export function App() {
             onUiDensityChange={handleUiDensityChange}
             devRunLoggingEnabled={devRunLoggingEnabled}
             onDevRunLoggingEnabledChange={handleDevRunLoggingEnabledChange}
+            homeResearchVaultEnabled={homeResearchVaultEnabled}
+            homeNextActionsEnabled={homeNextActionsEnabled}
+            onHomeResearchVaultEnabledChange={handleHomeResearchVaultEnabledChange}
+            onHomeNextActionsEnabledChange={handleHomeNextActionsEnabledChange}
             initialTab={settingsTab}
             onShowOnboarding={handleShowOnboarding}
             onboardingCompletedAt={onboardingCompletedAt}
