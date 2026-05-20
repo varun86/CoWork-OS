@@ -29,6 +29,8 @@ const DEFAULT_SETTINGS: AppearanceSettings = {
   uiDensity: "focused",
   timelineVerbosity: "summary",
   devRunLoggingEnabled: false,
+  homeResearchVaultEnabled: false,
+  homeNextActionsEnabled: false,
   disclaimerAccepted: false,
   onboardingCompleted: false,
   onboardingCompletedAt: undefined,
@@ -143,7 +145,9 @@ export class AppearanceManager {
             typeof stored.transparencyEffectsEnabled !== "boolean" ||
             !isValidUiDensity(stored.uiDensity) ||
             !isValidTimelineVerbosity(stored.timelineVerbosity) ||
-            typeof stored.devRunLoggingEnabled !== "boolean"
+            typeof stored.devRunLoggingEnabled !== "boolean" ||
+            typeof stored.homeResearchVaultEnabled !== "boolean" ||
+            typeof stored.homeNextActionsEnabled !== "boolean"
           ) {
             needsWrite = true;
           }
@@ -180,6 +184,14 @@ export class AppearanceManager {
         settings.devRunLoggingEnabled = DEFAULT_SETTINGS.devRunLoggingEnabled;
         needsWrite = true;
       }
+      if (typeof settings.homeResearchVaultEnabled !== "boolean") {
+        settings.homeResearchVaultEnabled = DEFAULT_SETTINGS.homeResearchVaultEnabled;
+        needsWrite = true;
+      }
+      if (typeof settings.homeNextActionsEnabled !== "boolean") {
+        settings.homeNextActionsEnabled = DEFAULT_SETTINGS.homeNextActionsEnabled;
+        needsWrite = true;
+      }
     } catch (error) {
       console.error("[AppearanceManager] Failed to load settings:", error);
       settings = { ...DEFAULT_SETTINGS };
@@ -199,6 +211,8 @@ export class AppearanceManager {
             uiDensity: settings.uiDensity,
             timelineVerbosity: settings.timelineVerbosity,
             devRunLoggingEnabled: settings.devRunLoggingEnabled,
+            homeResearchVaultEnabled: settings.homeResearchVaultEnabled,
+            homeNextActionsEnabled: settings.homeNextActionsEnabled,
           }),
         );
       } catch  {
@@ -302,6 +316,14 @@ export class AppearanceManager {
           typeof settings.devRunLoggingEnabled === "boolean"
             ? settings.devRunLoggingEnabled
             : existingSettings.devRunLoggingEnabled,
+        homeResearchVaultEnabled:
+          typeof settings.homeResearchVaultEnabled === "boolean"
+            ? settings.homeResearchVaultEnabled
+            : existingSettings.homeResearchVaultEnabled,
+        homeNextActionsEnabled:
+          typeof settings.homeNextActionsEnabled === "boolean"
+            ? settings.homeNextActionsEnabled
+            : existingSettings.homeNextActionsEnabled,
       };
 
       const repository = SecureSettingsRepository.getInstance();
