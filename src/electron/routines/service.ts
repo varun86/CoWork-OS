@@ -11,6 +11,7 @@ import type {
   Routine,
   RoutineApiTrigger,
   RoutineChannelEventTrigger,
+  RoutineContextBindings,
   RoutineConnectorEventTrigger,
   RoutineCreate,
   RoutineDefinition,
@@ -44,6 +45,7 @@ export class RoutineService {
     Pick<
       RoutineServiceDeps,
       | "createTask"
+      | "sendTaskMessage"
       | "createManagedSession"
       | "runTaskOnDevice"
       | "getTaskSnapshot"
@@ -547,6 +549,7 @@ export class RoutineService {
     }
 
     const agentConfig = this.buildRoutineAgentConfig(routine);
+    const targetTaskId = getRoutineTargetTaskId(routine);
     const payload = {
       name: `Routine: ${routine.name}`,
       description: routine.description,
@@ -555,6 +558,17 @@ export class RoutineService {
       taskPrompt: buildRoutinePrompt(routine, "schedule"),
       taskTitle: routine.name,
       schedule: trigger.schedule,
+      runMode: targetTaskId ? ("thread_follow_up" as const) : ("new_task" as const),
+      targetTaskId,
+      threadAutomation: targetTaskId
+        ? {
+            sourceTaskId: targetTaskId,
+            sourceTaskTitle: routine.contextBindings.metadata?.sourceTaskTitle,
+            sourceLink: routine.contextBindings.metadata?.sourceLink,
+            wakeObjective: routine.instructions,
+            includeContextBrief: true,
+          }
+        : undefined,
       allowUserInput: agentConfig?.allowUserInput ?? false,
       taskAgentConfig: agentConfig,
       chatContext: routine.contextBindings.chatContext,
@@ -599,11 +613,13 @@ export class RoutineService {
     settings.mappings = settings.mappings.filter((mapping) => mapping.id !== managedHookMappingId);
 
     if (routine.enabled && trigger.enabled) {
+      const targetTaskId = getRoutineTargetTaskId(routine);
       const mapping: HookMappingConfig = {
         id: managedHookMappingId,
         token,
         match: { path },
-        action: "agent",
+        action: targetTaskId ? "task_message" : "agent",
+        targetTaskId,
         name: routine.name,
         workspaceId: routine.workspaceId,
         messageTemplate: buildRoutinePrompt(routine, "api", [
@@ -648,6 +664,7 @@ export class RoutineService {
       throw new Error("Event trigger service is not available");
     }
 
+    const targetTaskId = getRoutineTargetTaskId(routine);
     const source = routineTriggerSource(trigger);
     const nextTriggerId =
       trigger.managedEventTriggerId || `routine:${routine.id}:${trigger.type}:${trigger.id}`;
@@ -666,6 +683,8 @@ export class RoutineService {
           workspaceId: routine.workspaceId,
           prompt: buildTriggeredPrompt(routine, trigger),
           agentConfig: this.buildRoutineAgentConfig(routine),
+          runMode: targetTaskId ? "thread_follow_up" : "new_task",
+          targetTaskId,
         },
       },
       workspaceId: routine.workspaceId,
@@ -822,6 +841,23 @@ export class RoutineService {
         });
         return {
           taskId: task.id,
+          status: "queued",
+          outputStatus: "none",
+        };
+      }
+
+      const targetTaskId = getRoutineTargetTaskId(routine);
+      if (targetTaskId) {
+        if (!this.deps.sendTaskMessage) {
+          throw new Error("Thread follow-up execution is not available in this runtime");
+        }
+        await this.deps.sendTaskMessage({
+          taskId: targetTaskId,
+          message: params.prompt,
+          agentConfig,
+        });
+        return {
+          taskId: targetTaskId,
           status: "queued",
           outputStatus: "none",
         };
@@ -1112,6 +1148,26 @@ function normalizeContextBindings(
     chatContext,
     metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
   };
+}
+
+function getRoutineTargetTaskId(routine: Routine): string | undefined {
+  const metadata: RoutineContextBindings["metadata"] = routine.contextBindings.metadata || {};
+  const runMode = metadata.runMode || metadata.automationRunMode;
+  const targetTaskId = [
+    metadata.targetTaskId,
+    metadata.sourceTaskId,
+    metadata.threadTaskId,
+    metadata.taskId,
+  ].find((value): value is string => typeof value === "string" && value.trim().length > 0);
+  if (!targetTaskId) return undefined;
+  if (
+    runMode === "thread_follow_up" ||
+    runMode === "continue_thread" ||
+    metadata.threadAutomation === "true"
+  ) {
+    return targetTaskId;
+  }
+  return undefined;
 }
 
 function normalizeConnectorPolicy(
