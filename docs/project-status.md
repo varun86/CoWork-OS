@@ -11,7 +11,7 @@ CoWork OS is a **security-first, GUI-first local AI super app and everything app
 - **Personal AI Gateway**: Connect your AI assistant to WhatsApp, Telegram, Discord, Slack, and iMessage
 - **Everything Workbench**: Create, open, review, edit, and revise generated documents, spreadsheets, presentations, web pages, PDFs, and previews from the same local-first task workspace
 - **Managed Devices**: Operate local and remote CoWork machines from a dedicated Devices tab
-- **Automations Surface**: One settings group for queueing, scheduling, triggers, briefing, and Workflow Intelligence suggestions/reflection/Dreaming; task view can also create cron scheduled tasks from the current task menu
+- **Automations Surface**: One settings group for queueing, scheduling, triggers, briefing, and Workflow Intelligence suggestions/reflection/Dreaming; task view can also create task-sourced routines that continue the current thread by default
 - **Renderer Performance**: Sidebar and timeline virtualization in the `CoWork-OS/CoWork-OS` repo use `@chenglou/pretext` for text measurement and keep long task feeds responsive
 - **Security-First Design**: 4,932 automated tests across 390 test files, configurable guardrails, layered permission rules, workspace-local policy files, and approval workflows
 - **Imported Capability Security**: managed skill and pack imports are staged, scanned, reported, and quarantined when blocked instead of being activated directly
@@ -115,6 +115,7 @@ CoWork OS is a **security-first, GUI-first local AI super app and everything app
 #### Composer Routing
 - [x] Grouped `@` autocomplete for Agents, Integrations, and Files
 - [x] Configured integration mention resolver with Google Workspace split into built-in Gmail, Google Drive, and Google Calendar plus MCP-backed Google Docs, Google Sheets, Google Slides, Google Tasks, and Google Chat when available
+- [ ] **Google OAuth verification (in progress)**: bundled OAuth client submitted for Gmail-only scopes (`gmail.readonly`, `gmail.send`, `gmail.modify`, `gmail.labels`). Awaiting Google approval and CASA security assessment. Until verified, Gmail Only mode requires a custom OAuth client; Full Workspace mode remains available. Privacy Policy and Terms of Service updated with Limited Use compliance, encryption details, and data retention clauses.
 - [x] Rich inline integration chips in the composer, sent user bubbles, and restored task/session history
 - [x] Soft `integrationMentions` runtime guidance without changing `allowedTools`
 - [x] `@Inbox` routing from the main composer into Inbox Agent Ask Inbox
@@ -289,7 +290,7 @@ CoWork OS is a **security-first, GUI-first local AI super app and everything app
 - [x] Guardrail settings (budgets, limits)
 - [x] Queue settings (concurrency)
 - [x] Automations settings group (queue, Workflow Intelligence, scheduled, hooks, triggers, briefing)
-- [x] Task-sourced scheduled automations from task view overflow menu
+- [x] Task-sourced same-thread and new-task automations from task view overflow menu
 - [x] Custom Skills management
 - [x] Quarantined Imports sections for skills and plugin packs with report, retry scan, and removal actions
 - [x] Personality settings (styles, personas, quirks)
