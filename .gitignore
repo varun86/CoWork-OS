@@ -93,9 +93,19 @@ vm-bundle/
 *.asar
 
 # Temporary files
+/.tmp/
 tmp/
 temp/
 *.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+*.rej
+*~
+*.pid
+*.pid.lock
+*.seed
 
 # Python cache artifacts
 **/__pycache__/
@@ -124,3 +134,7 @@ CoWork OS founder vault/
 AGENTS.md
 /Users/
 /solana-dapp/
+changed-file-set-review-artifact.pdf
+exact-changed-file-set.xlsx
+recovery/
+jsonl-preview.png
