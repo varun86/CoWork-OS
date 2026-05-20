@@ -484,6 +484,107 @@ image_generation_contract:
     ).toEqual(["generate_image", "web_search", "read_file"]);
   });
 
+  it("rewrites broad personal-folder file discovery back to the selected workspace", async () => {
+    const executor = createPlanExecutor({
+      usage: { inputTokens: 1, outputTokens: 2 },
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            description: "Combine videos",
+            steps: [
+              { id: "1", description: "Locate the two source videos" },
+              {
+                id: "2",
+                description:
+                  "Search the current workspace and likely media folders such as Desktop, Downloads, and Movies for video files.",
+              },
+              { id: "3", description: "Create the combined video file" },
+            ],
+          }),
+        },
+      ],
+    });
+    const prompt =
+      'can you combine two videos and save it as a new video named "Cowork OS Gmail"';
+    executor.task.title = prompt;
+    executor.task.prompt = prompt;
+    executor.task.rawPrompt = prompt;
+
+    await executor.createPlan();
+
+    expect(executor.plan.steps[1].description).toBe(
+      "Search the selected workspace for the required source files; ask for a path if they are not present there.",
+    );
+  });
+
+  it("keeps explicit user-requested personal-folder discovery locations", async () => {
+    const executor = createPlanExecutor({
+      usage: { inputTokens: 1, outputTokens: 2 },
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            description: "Find videos",
+            steps: [
+              {
+                id: "1",
+                description: "Search Downloads and Movies for the source video files.",
+              },
+            ],
+          }),
+        },
+      ],
+    });
+    const prompt = "Find the videos in Downloads and Movies, then combine them.";
+    executor.task.title = prompt;
+    executor.task.prompt = prompt;
+    executor.task.rawPrompt = prompt;
+
+    await executor.createPlan();
+
+    expect(executor.plan.steps[0].description).toBe(
+      "Search Downloads and Movies for the source video files.",
+    );
+  });
+
+  it("drops non-action supported-format plan steps and requires an mp4 output for video saves", async () => {
+    const executor = createPlanExecutor({
+      usage: { inputTokens: 1, outputTokens: 2 },
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            description: "Combine videos",
+            steps: [
+              { id: "1", description: "Find the two source videos" },
+              {
+                id: "2",
+                description: "Supported likely formats: `.mp4`, `.mov`, `.m4v`, `.webm`, `.avi`.",
+              },
+              { id: "3", description: "Inspect video durations" },
+            ],
+          }),
+        },
+      ],
+    });
+    const prompt =
+      'can you combine two videos and save it as a new video named "Cowork OS Gmail"\n\n' +
+      "the longer video should be the first and the other should come after it";
+    executor.task.title = prompt;
+    executor.task.prompt = prompt;
+    executor.task.rawPrompt = prompt;
+
+    await executor.createPlan();
+
+    expect(executor.plan.steps.map((step: Any) => step.description)).not.toContain(
+      "Supported likely formats: `.mp4`, `.mov`, `.m4v`, `.webm`, `.avi`.",
+    );
+    expect(executor.plan.steps.at(-1).description).toBe(
+      "Create the final combined video file `Cowork OS Gmail.mp4` with the longer source video first.",
+    );
+  });
+
   it("does not classify gather-and-verify work steps as verification checkpoints", () => {
     const executor = createPlanExecutor({
       usage: { inputTokens: 1, outputTokens: 2 },
