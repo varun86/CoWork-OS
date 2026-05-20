@@ -95,6 +95,43 @@ describe("TaskExecutor /schedule slash command handling", () => {
     expect(String(summary)).toContain('Scheduled "Check price."');
   });
 
+  it("creates a current-thread scheduled follow-up for `/schedule here every`", async () => {
+    const calls: Any[] = [];
+    const executor = createExecutor(
+      "/schedule here every 1d Return to this conversation and update the open loops.",
+      (input) => {
+        calls.push(input);
+        if (input.action === "list") return [];
+        if (input.action === "create") {
+          return {
+            success: true,
+            job: {
+              id: "job-1",
+              name: input.name,
+              enabled: true,
+              schedule: { kind: "every", everyMs: 24 * 60 * 60 * 1000 },
+              state: { nextRunAtMs: Date.now() + 123_000 },
+            },
+          };
+        }
+        throw new Error(`Unexpected action: ${input.action}`);
+      },
+    );
+
+    const handled = await (TaskExecutor as Any).prototype.maybeHandleScheduleSlashCommand.call(
+      executor,
+    );
+
+    expect(handled).toBe(true);
+    expect(calls[1]).toMatchObject({
+      action: "create",
+      target: "current_thread",
+      schedule: { type: "interval", every: "1d" },
+    });
+    const summary = executor.daemon.completeTask.mock.calls[0][1];
+    expect(String(summary)).toContain("Target: this conversation");
+  });
+
   it("lists scheduled tasks for `/schedule list`", async () => {
     const executor = createExecutor("/schedule list", (input) => {
       if (input.action === "list") {
