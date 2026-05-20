@@ -7,7 +7,6 @@
  */
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
 import type { Task, AgentTeamRun, AgentThought, TaskEvent } from "../../shared/types";
 import { isSynthesisChildTask } from "../../shared/synthesis-agent-detection";
 import { getEmojiIcon } from "../utils/emoji-icon-map";
@@ -30,11 +29,15 @@ interface AgentLine {
   id: string;
   title: string;
   status: string;
+  statusKind: AgentLineStatusKind;
+  statusLabel: string;
   isStreaming: boolean;
   taskId: string | null; // null when not yet spawned
   icon?: string;
   task?: Task | null;
 }
+
+type AgentLineStatusKind = "completed" | "failed" | "warning" | "running" | "pending";
 
 const STEP_EVENT_TYPES = new Set([
   "step_started",
@@ -71,12 +74,6 @@ function isStageBoundaryEvent(event: TaskEvent): boolean {
   const groupId = String(event.groupId || p?.groupId || "").toLowerCase();
   const message = String(p?.message || p?.groupLabel || "").trim().toUpperCase();
   return groupId === `stage:${stage.toLowerCase()}` || message === `STARTING ${stage}` || message === stage;
-}
-
-function truncateStatus(s: string, maxLen: number): string {
-  const t = s.trim();
-  if (t.length <= maxLen) return t;
-  return t.slice(0, maxLen).trim() + "…";
 }
 
 /** Format tool/step labels for compact display (e.g. "grep done", "web search started") */
@@ -199,20 +196,48 @@ function getLatestStepLabel(
   }
 }
 
-function getStatusColor(status: string, task: Task | null): string {
+function getAgentLineStatusKind(
+  task: Task | null,
+  status: string,
+  isStreaming: boolean,
+): AgentLineStatusKind {
   if (task?.terminalStatus === "failed" || task?.status === "failed" || task?.status === "cancelled")
-    return "var(--color-danger, #ef4444)";
+    return "failed";
   if (
     task?.terminalStatus === "partial_success" ||
     task?.terminalStatus === "needs_user_action" ||
     task?.terminalStatus === "awaiting_approval" ||
     task?.terminalStatus === "resume_available"
   )
-    return "var(--color-warning, #f59e0b)";
-  if (task?.status === "completed") return "var(--color-success, #10b981)";
-  if (status.startsWith("Step failed") || status.startsWith("Failed")) return "var(--color-danger, #ef4444)";
-  if (task?.status === "executing" || task?.status === "planning") return "var(--color-warning, #f59e0b)";
-  return "var(--color-text-secondary)";
+    return "warning";
+  if (task?.status === "completed") return "completed";
+  if (status.startsWith("Step failed") || status.startsWith("Failed")) return "failed";
+  if (isStreaming || task?.status === "executing" || task?.status === "planning") return "running";
+  return "pending";
+}
+
+function getAgentLineStatusLabel(kind: AgentLineStatusKind, task: Task | null): string {
+  if (kind === "completed") return "Done";
+  if (kind === "failed") return task?.status === "cancelled" ? "Cancelled" : "Failed";
+  if (kind === "warning") return "Needs review";
+  if (kind === "running") return "Running";
+  return "Pending";
+}
+
+function getSummaryPart(count: number, label: string): string | null {
+  return count > 0 ? `${count} ${label}` : null;
+}
+
+function formatAgentSummary(counts: Record<AgentLineStatusKind, number>): string {
+  return [
+    getSummaryPart(counts.completed, "done"),
+    getSummaryPart(counts.failed, "failed"),
+    getSummaryPart(counts.warning, "warning"),
+    getSummaryPart(counts.running, "running"),
+    getSummaryPart(counts.pending, "pending"),
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 export function CollaborativeAgentLines({
@@ -323,10 +348,14 @@ export function CollaborativeAgentLines({
     const roleId = t.assignedAgentRoleId ?? taskToRole.get(t.id);
     const isStreaming = !!roleId && streamingByAgent.has(roleId);
     const role = roleId ? agentRoles.get(roleId) : undefined;
+    const status = getLatestStepLabel(t.id, childEvents, t, isStreaming);
+    const statusKind = getAgentLineStatusKind(t, status, isStreaming);
     agentLines.push({
       id: t.id,
       title: t.title,
-      status: getLatestStepLabel(t.id, childEvents, t, isStreaming),
+      status,
+      statusKind,
+      statusLabel: getAgentLineStatusLabel(statusKind, t),
       isStreaming,
       taskId: t.id,
       icon: role?.icon,
@@ -340,10 +369,14 @@ export function CollaborativeAgentLines({
     const roleId = item.ownerAgentRoleId;
     const isStreaming = !!roleId && streamingByAgent.has(roleId);
     const role = roleId ? agentRoles.get(roleId) : undefined;
+    const status = getLatestStepLabel("", childEvents, null, isStreaming);
+    const statusKind = getAgentLineStatusKind(null, status, isStreaming);
     agentLines.push({
       id: item.id,
       title: item.title,
-      status: getLatestStepLabel("", childEvents, null, isStreaming),
+      status,
+      statusKind,
+      statusLabel: getAgentLineStatusLabel(statusKind, null),
       isStreaming,
       taskId: item.sourceTaskId || null,
       icon: role?.icon ?? item.icon,
@@ -363,46 +396,53 @@ export function CollaborativeAgentLines({
 
   if (agentLines.length === 0) return null;
 
+  const statusCounts = agentLines.reduce<Record<AgentLineStatusKind, number>>(
+    (acc, line) => {
+      acc[line.statusKind] += 1;
+      return acc;
+    },
+    { completed: 0, failed: 0, warning: 0, running: 0, pending: 0 },
+  );
+
   return (
     <div className="collaborative-agent-lines">
       <div className="collab-lines-header">
         <span className="collab-lines-title">
           {agentLines.length} {isMultiLlm ? "models" : "background agents"}
         </span>
+        <span className="collab-lines-summary">{formatAgentSummary(statusCounts)}</span>
         <span className="collab-lines-hint">@ to tag agents</span>
       </div>
       <div className="collab-lines-list">
-        {agentLines.map(({ id, title, status, isStreaming, taskId, icon, task }) => (
-          <div key={id} className="collab-agent-line">
+        {agentLines.map(({ id, title, status, statusKind, statusLabel, taskId, icon }) => (
+          <div key={id} className={`collab-agent-line collab-agent-line-${statusKind}`}>
             <span className="collab-agent-status-text">
-              {isStreaming && (
-                <Loader2 className="collab-agent-spinner" size={12} strokeWidth={2.5} />
-              )}
               <span className="collab-agent-icon">
                 {(() => {
                   const Icon = getEmojiIcon(icon || "🤖");
                   return <Icon size={14} strokeWidth={1.5} />;
                 })()}
               </span>
-              <span
-                className="collab-agent-name"
-                style={{ color: getStatusColor(status, task ?? null) }}
-              >
+              <span className="collab-agent-name">
                 {stripLeadingEmoji(title)}
               </span>
-              <span className="collab-agent-status" title={status.length > 40 ? status : undefined}>
-                {" "}
-                {truncateStatus(status, 40)}
-              </span>
+            </span>
+            <span
+              className={`collab-agent-state collab-agent-state-${statusKind}`}
+              title={status}
+              aria-label={status}
+            >
+              {statusLabel}
             </span>
             {taskId ? (
               (() => {
                 const t = childByTaskId.get(taskId);
                 return t && isSynthesisChildTask(t);
               })() ? (
-                <span className="collab-agent-open-disabled" title="Synthesis output is shown in main view">
-                  In main view
-                </span>
+                <span
+                  className="collab-agent-open-empty"
+                  title="Synthesis output is shown in main view"
+                />
               ) : (
                 <button
                   type="button"
@@ -421,13 +461,8 @@ export function CollaborativeAgentLines({
       </div>
       {!mainTaskCompleted && onWrapUp && (
         <div className="collab-lines-actions">
-          <Loader2
-            className="collab-lines-spinner"
-            size={14}
-            strokeWidth={2.5}
-          />
           <span className="collab-lines-status">
-            {isWrappingUp ? "Wrapping up..." : "Agents are working..."}
+            {isWrappingUp ? "Wrapping up..." : isMultiLlm ? "Models are working..." : "Agents are working..."}
           </span>
           <button
             type="button"
