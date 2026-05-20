@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **First-run onboarding docs and UX**: documented the staged first-run setup flow, ChatGPT subscription sign-in path, local Ollama detection, free-option provider badges for OpenRouter/Gemini/Groq, and the fixed-frame onboarding recap with a scrollable review body.
 
+### Fixed
+- **Multitask resource stability**: comprehensive performance fixes addressing renderer memory growth (7.4 GB → <2 GB target), MCP server process leaks (27 leaked → ref-counted lifecycle), synthesis prompt bloat (244k → 100k char budget), React infinite render loops, SQLite lock contention (WAL mode + busy timeout), and executor cache pressure. See [Performance & Stability](performance-stability.md).
+- **Collaborative team run phase tracking**: added `execute` phase to `AgentTeamRunPhase` so the UI shows "Agents are executing..." during active child task work instead of "Thinking...".
+- **Read-only review safety**: review tasks automatically snapshot git state at start and restrict system interaction tools (screenshots, clicks, mouse) to prevent accidental workspace modifications.
+- **Workspace verification deduplication**: identical verification commands in the same workspace are deduplicated at the daemon level, preventing concurrent `tsc --noEmit` or build processes.
+
 ## [0.5.45] - 2026-05-14
 
 ### Added
