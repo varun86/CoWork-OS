@@ -39,6 +39,15 @@ const buildDaemon = () => ({
   logEvent: vi.fn(),
 });
 
+function gmailResult(data: Any, status = 200): Any {
+  return { status, data };
+}
+
+function decodeGmailRaw(raw: string): string {
+  const normalized = raw.replace(/-/g, "+").replace(/_/g, "/");
+  return Buffer.from(normalized, "base64").toString("utf8");
+}
+
 let settingsSpy: ReturnType<typeof vi.spyOn>;
 
 beforeAll(() => {
@@ -147,6 +156,190 @@ describe("GmailTools error boundary", () => {
         action: "get_profile",
         message: "Gmail API error 500: nope",
       }),
+    );
+  });
+
+  it("searches Gmail with Codex-style summaries", async () => {
+    const daemon = buildDaemon();
+    const tools = new GmailTools(workspace, daemon as Any, taskId);
+    const gmailRequestMock = gmailRequest as unknown as ReturnType<typeof vi.fn>;
+    gmailRequestMock
+      .mockResolvedValueOnce(
+        gmailResult({
+          messages: [{ id: "msg-1", threadId: "thread-1" }],
+          nextPageToken: "next-1",
+          resultSizeEstimate: 1,
+        }),
+      )
+      .mockResolvedValueOnce(
+        gmailResult({
+          id: "msg-1",
+          threadId: "thread-1",
+          labelIds: ["INBOX", "UNREAD"],
+          snippet: "Latest snippet",
+          payload: {
+            headers: [
+              { name: "Subject", value: "Status update" },
+              { name: "From", value: "Pat <pat@example.com>" },
+              { name: "To", value: "me@example.com" },
+              { name: "Date", value: "Mon, 18 May 2026 10:00:00 +0000" },
+            ],
+          },
+        }),
+      );
+
+    const result = await tools.executeCodexStyleTool("gmail_search_emails", {
+      query: "in:inbox newer_than:7d",
+      label_ids: ["INBOX"],
+      max_results: 20,
+    });
+
+    expect(gmailRequestMock).toHaveBeenNthCalledWith(
+      1,
+      expect.any(Object),
+      expect.objectContaining({
+        method: "GET",
+        path: "/users/me/messages",
+        query: expect.objectContaining({
+          q: "in:inbox newer_than:7d",
+          labelIds: ["INBOX"],
+          maxResults: 20,
+        }),
+      }),
+    );
+    expect(result).toMatchObject({
+      success: true,
+      next_page_token: "next-1",
+      emails: [
+        {
+          id: "msg-1",
+          thread_id: "thread-1",
+          subject: "Status update",
+          from: "Pat <pat@example.com>",
+          label_ids: ["INBOX", "UNREAD"],
+        },
+      ],
+    });
+  });
+
+  it("resolves a message ID before reading a Codex-style Gmail thread", async () => {
+    const daemon = buildDaemon();
+    const tools = new GmailTools(workspace, daemon as Any, taskId);
+    const gmailRequestMock = gmailRequest as unknown as ReturnType<typeof vi.fn>;
+    gmailRequestMock
+      .mockResolvedValueOnce(gmailResult({ id: "msg-1", threadId: "thread-1", payload: {} }))
+      .mockResolvedValueOnce(
+        gmailResult({
+          id: "thread-1",
+          messages: [
+            {
+              id: "msg-1",
+              threadId: "thread-1",
+              snippet: "Hello",
+              payload: {
+                headers: [{ name: "Subject", value: "Thread" }],
+                parts: [
+                  {
+                    mimeType: "text/plain",
+                    body: { data: Buffer.from("Full body").toString("base64url") },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      );
+
+    const result = await tools.executeCodexStyleTool("gmail_read_email_thread", {
+      id: "msg-1",
+    });
+
+    expect(gmailRequestMock).toHaveBeenNthCalledWith(
+      2,
+      expect.any(Object),
+      expect.objectContaining({
+        method: "GET",
+        path: "/users/me/threads/thread-1",
+        query: { format: "full" },
+      }),
+    );
+    expect(result.messages[0]).toMatchObject({
+      id: "msg-1",
+      body: "Full body",
+    });
+  });
+
+  it("applies Gmail labels by display name with explicit approval", async () => {
+    const daemon = buildDaemon();
+    const tools = new GmailTools(workspace, daemon as Any, taskId);
+    const gmailRequestMock = gmailRequest as unknown as ReturnType<typeof vi.fn>;
+    gmailRequestMock
+      .mockResolvedValueOnce(
+        gmailResult({
+          labels: [{ id: "Label_1", name: "Waiting" }],
+        }),
+      )
+      .mockResolvedValueOnce(gmailResult({}, 204));
+
+    const result = await tools.executeCodexStyleTool("gmail_apply_labels_to_emails", {
+      message_ids: ["msg-1"],
+      add_label_names: ["Waiting"],
+    });
+
+    expect(daemon.requestApproval).toHaveBeenCalledWith(
+      taskId,
+      "external_service",
+      "Apply Gmail labels to selected messages",
+      expect.objectContaining({
+        tool: "gmail_apply_labels_to_emails",
+        message_ids: ["msg-1"],
+      }),
+    );
+    expect(await daemon.requestApproval.mock.results[0]?.value).toBe(true);
+    expect(gmailRequestMock).toHaveBeenNthCalledWith(
+      2,
+      expect.any(Object),
+      expect.objectContaining({
+        method: "POST",
+        path: "/users/me/messages/batchModify",
+        body: {
+          ids: ["msg-1"],
+          addLabelIds: ["Label_1"],
+          removeLabelIds: [],
+        },
+      }),
+    );
+    expect(result).toMatchObject({ success: true, status: 204 });
+  });
+
+  it("requests approval before Codex-style Gmail send", async () => {
+    const daemon = buildDaemon();
+    const tools = new GmailTools(workspace, daemon as Any, taskId);
+    const gmailRequestMock = gmailRequest as unknown as ReturnType<typeof vi.fn>;
+    gmailRequestMock.mockResolvedValueOnce(gmailResult({ id: "sent-1" }));
+
+    await tools.executeCodexStyleTool("gmail_send_email", {
+      to: "test@example.com",
+      subject: "Hello",
+      body: "Olá email",
+    });
+
+    expect(daemon.requestApproval).toHaveBeenCalledWith(
+      taskId,
+      "external_service",
+      "Send a Gmail message",
+      expect.objectContaining({
+        tool: "gmail_send_email",
+        to: "test@example.com",
+        subject: "Hello",
+      }),
+    );
+    const sendRequest = gmailRequestMock.mock.calls[0]?.[1] as Any;
+    const rawMessage = decodeGmailRaw(sendRequest.body.raw);
+    expect(rawMessage).toContain("Content-Transfer-Encoding: base64");
+    expect(rawMessage).not.toContain("Olá email");
+    expect(Buffer.from(rawMessage.split("\r\n\r\n")[1], "base64").toString("utf8")).toBe(
+      "Olá email",
     );
   });
 });
