@@ -1,6 +1,13 @@
 export type LogLevel = "error" | "warn" | "info" | "debug";
 
 type LogMethod = (...args: unknown[]) => void;
+type LogObserver = (event: {
+  component: string;
+  level: LogLevel;
+  args: unknown[];
+}) => void;
+
+let logObserver: LogObserver | null = null;
 
 const LEVEL_ORDER: Record<LogLevel, number> = {
   error: 0,
@@ -66,6 +73,13 @@ function emit(component: string, level: LogLevel, method: LogMethod, args: unkno
     return;
   }
   method(...prefixComponent(component, args));
+  if (level === "error" || level === "warn") {
+    try {
+      logObserver?.({ component, level, args });
+    } catch {
+      // Logging must never fail because a diagnostic observer failed.
+    }
+  }
 }
 
 export interface ComponentLogger {
@@ -84,4 +98,8 @@ export function createLogger(component: string): ComponentLogger {
     debug: (...args: unknown[]) => emit(component, "debug", console.log, args),
     isDebugEnabled: () => shouldLog(component, "debug"),
   };
+}
+
+export function setLogObserver(observer: LogObserver | null): void {
+  logObserver = observer;
 }
