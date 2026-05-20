@@ -278,6 +278,142 @@ describe("readFilesByPatterns", () => {
     );
   });
 
+  it("blocks destructive root package.json marker-only overwrites", async () => {
+    writeFile(
+      path.join(tmpDir, "package.json"),
+      JSON.stringify(
+        {
+          name: "cowork-os",
+          version: "0.5.46",
+          scripts: {
+            dev: "node scripts/dev_with_logs.mjs",
+            build: "vite build",
+          },
+          dependencies: {
+            react: "^19.0.0",
+          },
+          devDependencies: {
+            vite: "^7.0.0",
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const markerOnlyManifest = JSON.stringify(
+      {
+        name: "cowork",
+        private: true,
+        version: "0.0.0",
+        coworkBuildHealth: {
+          routine: "CoWork OS Build Health Watcher",
+          step: "package.json",
+        },
+      },
+      null,
+      2,
+    );
+
+    await expect(fileTools.writeFile("package.json", markerOnlyManifest)).rejects.toThrow(
+      /Refusing to overwrite root package\.json/,
+    );
+
+    const packageJson = JSON.parse(fs.readFileSync(path.join(tmpDir, "package.json"), "utf-8"));
+    expect(packageJson.scripts.dev).toBe("node scripts/dev_with_logs.mjs");
+    expect(packageJson.scripts.build).toBe("vite build");
+  });
+
+  it("allows root package.json edits that preserve scripts and dependency sections", async () => {
+    writeFile(
+      path.join(tmpDir, "package.json"),
+      JSON.stringify(
+        {
+          name: "cowork-os",
+          version: "0.5.46",
+          scripts: {
+            dev: "node scripts/dev_with_logs.mjs",
+            build: "vite build",
+          },
+          dependencies: {
+            react: "^19.0.0",
+          },
+          devDependencies: {
+            vite: "^7.0.0",
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const updatedManifest = JSON.stringify(
+      {
+        name: "cowork-os",
+        version: "0.5.47",
+        scripts: {
+          dev: "node scripts/dev_with_logs.mjs",
+          build: "vite build",
+        },
+        dependencies: {
+          react: "^19.0.0",
+        },
+        devDependencies: {
+          vite: "^7.0.0",
+        },
+        coworkBuildHealth: {
+          routine: "CoWork OS Build Health Watcher",
+        },
+      },
+      null,
+      2,
+    );
+
+    const out = await fileTools.writeFile("package.json", updatedManifest);
+
+    expect(out.success).toBe(true);
+    const packageJson = JSON.parse(fs.readFileSync(path.join(tmpDir, "package.json"), "utf-8"));
+    expect(packageJson.version).toBe("0.5.47");
+    expect(packageJson.scripts.dev).toBe("node scripts/dev_with_logs.mjs");
+  });
+
+  it("blocks destructive root package-lock.json marker-only overwrites", async () => {
+    writeFile(
+      path.join(tmpDir, "package-lock.json"),
+      JSON.stringify(
+        {
+          name: "cowork-os",
+          version: "0.5.46",
+          lockfileVersion: 3,
+          packages: {
+            "": {
+              name: "cowork-os",
+              version: "0.5.46",
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const markerOnlyLockfile = JSON.stringify(
+      {
+        artifact: "package-lock.json",
+        routine: "CoWork OS Build Health Watcher",
+      },
+      null,
+      2,
+    );
+
+    await expect(fileTools.writeFile("package-lock.json", markerOnlyLockfile)).rejects.toThrow(
+      /Refusing to overwrite root package-lock\.json/,
+    );
+
+    const packageLock = JSON.parse(fs.readFileSync(path.join(tmpDir, "package-lock.json"), "utf-8"));
+    expect(packageLock.packages[""].name).toBe("cowork-os");
+  });
+
   it("reports the stuck phase when write_file times out internally", async () => {
     (fileTools as Any).enforceSymlinkSafeAccess = vi.fn(() => new Promise(() => {}));
 
