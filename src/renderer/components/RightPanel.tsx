@@ -272,6 +272,208 @@ function stripInlineMarkdownFormatting(text: string): string {
     .trim();
 }
 
+type CollaborativeAgentStatusKind = "completed" | "warning" | "failed" | "running" | "pending";
+
+type CollaborativeAgentUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  cost: number;
+};
+
+type CollaborativeAgentRow = {
+  task: Task;
+  statusKind: CollaborativeAgentStatusKind;
+  statusLabel: string;
+  eventCount: number;
+  toolCallCount: number;
+  llmCallCount: number;
+  usage: CollaborativeAgentUsage;
+  durationMs: number;
+};
+
+type CollaborativeAgentTotals = {
+  total: number;
+  completed: number;
+  warning: number;
+  failed: number;
+  running: number;
+  pending: number;
+  eventCount: number;
+  toolCallCount: number;
+  llmCallCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  cost: number;
+  wallDurationMs: number;
+  rows: CollaborativeAgentRow[];
+};
+
+function toFiniteNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function formatCompactNumber(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}K`;
+  return String(Math.round(value));
+}
+
+function formatRightPanelDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "0s";
+  const totalSeconds = Math.max(1, Math.round(ms / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
+
+function formatCost(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "$0";
+  if (value < 0.01) return `$${value.toFixed(4)}`;
+  if (value < 1) return `$${value.toFixed(3)}`;
+  return `$${value.toFixed(2)}`;
+}
+
+function getCollaborativeAgentStatusKind(task: Task): CollaborativeAgentStatusKind {
+  if (task.terminalStatus === "failed" || task.status === "failed" || task.status === "cancelled") {
+    return "failed";
+  }
+  if (
+    task.terminalStatus === "partial_success" ||
+    task.terminalStatus === "needs_user_action" ||
+    task.terminalStatus === "awaiting_approval" ||
+    task.terminalStatus === "resume_available"
+  ) {
+    return "warning";
+  }
+  if (task.status === "completed") return "completed";
+  if (task.status === "executing" || task.status === "planning" || task.status === "interrupted") {
+    return "running";
+  }
+  return "pending";
+}
+
+function getCollaborativeAgentStatusLabel(
+  kind: CollaborativeAgentStatusKind,
+  task: Task,
+): string {
+  if (kind === "completed") return "Done";
+  if (kind === "failed") return task.status === "cancelled" ? "Cancelled" : "Failed";
+  if (kind === "warning") return "Needs review";
+  if (kind === "running") return "Running";
+  return "Pending";
+}
+
+function getLatestUsageTotals(events: TaskEvent[]): CollaborativeAgentUsage {
+  const latest = [...events]
+    .reverse()
+    .find((event) => getEffectiveTaskEventType(event) === "llm_usage");
+  const payload =
+    latest?.payload && typeof latest.payload === "object" && !Array.isArray(latest.payload)
+      ? (latest.payload as Record<string, unknown>)
+      : {};
+  const totals =
+    payload.totals && typeof payload.totals === "object" && !Array.isArray(payload.totals)
+      ? (payload.totals as Record<string, unknown>)
+      : payload;
+  return {
+    inputTokens: toFiniteNumber(totals.inputTokens ?? totals.input_tokens),
+    outputTokens: toFiniteNumber(totals.outputTokens ?? totals.output_tokens),
+    cost: toFiniteNumber(totals.cost ?? totals.totalCost ?? payload.totalCost),
+  };
+}
+
+function getCollaborativeAgentTotals(
+  childTasks: Task[],
+  childEvents: TaskEvent[],
+): CollaborativeAgentTotals | null {
+  if (childTasks.length === 0) return null;
+  const eventsByTaskId = new Map<string, TaskEvent[]>();
+  for (const event of childEvents) {
+    const list = eventsByTaskId.get(event.taskId) || [];
+    list.push(event);
+    eventsByTaskId.set(event.taskId, list);
+  }
+
+  const rows = childTasks
+    .slice()
+    .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
+    .map((task): CollaborativeAgentRow => {
+      const taskEvents = eventsByTaskId.get(task.id) || [];
+      const statusKind = getCollaborativeAgentStatusKind(task);
+      const usage = getLatestUsageTotals(taskEvents);
+      const endMs = task.completedAt ?? task.updatedAt ?? task.createdAt;
+      return {
+        task,
+        statusKind,
+        statusLabel: getCollaborativeAgentStatusLabel(statusKind, task),
+        eventCount: taskEvents.length,
+        toolCallCount: taskEvents.filter((event) => getEffectiveTaskEventType(event) === "tool_call").length,
+        llmCallCount: taskEvents.filter((event) => getEffectiveTaskEventType(event) === "llm_usage").length,
+        usage,
+        durationMs: Math.max(0, endMs - task.createdAt),
+      };
+    });
+
+  const firstStartedAt = Math.min(...rows.map((row) => row.task.createdAt));
+  const lastEndedAt = Math.max(
+    ...rows.map((row) => row.task.completedAt ?? row.task.updatedAt ?? row.task.createdAt),
+  );
+  const counts = rows.reduce(
+    (acc, row) => {
+      acc[row.statusKind] += 1;
+      acc.eventCount += row.eventCount;
+      acc.toolCallCount += row.toolCallCount;
+      acc.llmCallCount += row.llmCallCount;
+      acc.inputTokens += row.usage.inputTokens;
+      acc.outputTokens += row.usage.outputTokens;
+      acc.cost += row.usage.cost;
+      return acc;
+    },
+    {
+      completed: 0,
+      warning: 0,
+      failed: 0,
+      running: 0,
+      pending: 0,
+      eventCount: 0,
+      toolCallCount: 0,
+      llmCallCount: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cost: 0,
+    },
+  );
+
+  return {
+    total: rows.length,
+    ...counts,
+    wallDurationMs: Math.max(0, lastEndedAt - firstStartedAt),
+    rows,
+  };
+}
+
+function areTaskEventListsEqual(a: TaskEvent[], b: TaskEvent[]): boolean {
+  if (a.length !== b.length) return false;
+  if (a.length === 0) return true;
+  const lastA = a[a.length - 1];
+  const lastB = b[b.length - 1];
+  return lastA.id === lastB.id && lastA.timestamp === lastB.timestamp;
+}
+
+function areChildTaskStatsEqual(a: Task[], b: Task[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].id !== b[i].id || a[i].status !== b[i].status || a[i].updatedAt !== b[i].updatedAt) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function getTaskEventActivityText(event: TaskEvent | null): string | null {
   if (!event) return null;
   const effectiveType = getEffectiveTaskEventType(event);
@@ -412,6 +614,8 @@ interface RightPanelProps {
   events: TaskEvent[];
   sharedTaskEventUi?: SharedTaskEventUiState | null;
   hasActiveChildren?: boolean;
+  childTasks?: Task[];
+  childEvents?: TaskEvent[];
   runningTasks?: Task[];
   queuedTasks?: Task[];
   queueStatus?: QueueStatus | null;
@@ -1214,12 +1418,135 @@ const ContextSection = memo(function ContextSection({
   prev.rendererPerfLoggingEnabled === next.rendererPerfLoggingEnabled
 );
 
+const CollaborativeAgentsSection = memo(function CollaborativeAgentsSection({
+  visible,
+  expanded,
+  totals,
+  toggleSection,
+  onSelectTask,
+  rendererPerfLoggingEnabled,
+}: {
+  visible: boolean;
+  expanded: boolean;
+  totals: CollaborativeAgentTotals | null;
+  toggleSection: () => void;
+  onSelectTask?: (taskId: string) => void;
+  rendererPerfLoggingEnabled?: boolean;
+}) {
+  recordRendererRender(
+    "CollaborativeAgentsSection",
+    `visible:${visible}:expanded:${expanded}`,
+    rendererPerfLoggingEnabled,
+  );
+  if (!visible || !totals) return null;
+
+  const totalTokens = totals.inputTokens + totals.outputTokens;
+  const statusSummary = [
+    totals.completed > 0 ? `${totals.completed} done` : null,
+    totals.warning > 0 ? `${totals.warning} warning` : null,
+    totals.failed > 0 ? `${totals.failed} failed` : null,
+    totals.running > 0 ? `${totals.running} running` : null,
+    totals.pending > 0 ? `${totals.pending} pending` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <div className="right-panel-section cli-section collaborative-agents-section">
+      <button type="button" className="cli-section-header" onClick={toggleSection} aria-expanded={expanded}>
+        <span className="cli-section-prompt">&gt;</span>
+        <span className="cli-section-title">
+          <span className="terminal-only">SUB_AGENTS</span>
+          <span className="modern-only">Sub Agents</span>
+        </span>
+        <span className="cli-active-context-badge">{totals.total}</span>
+        <span className="cli-section-toggle">
+          <span className="terminal-only">{expanded ? "[-]" : "[+]"}</span>
+          <span className="modern-only">{expanded ? "−" : "+"}</span>
+        </span>
+      </button>
+      {expanded && (
+        <div className="cli-section-content">
+          <div className="collab-agents-summary-card">
+            <div className="collab-agents-summary-head">
+              <strong>{totals.total} background agents</strong>
+              <span>{statusSummary || "No status yet"}</span>
+            </div>
+            <div className="collab-agents-stat-grid" aria-label="Sub-agent totals">
+              <div>
+                <span>Runtime</span>
+                <strong>{formatRightPanelDuration(totals.wallDurationMs)}</strong>
+              </div>
+              <div>
+                <span>Events</span>
+                <strong>{formatCompactNumber(totals.eventCount)}</strong>
+              </div>
+              <div>
+                <span>Tools</span>
+                <strong>{formatCompactNumber(totals.toolCallCount)}</strong>
+              </div>
+              <div>
+                <span>LLM calls</span>
+                <strong>{formatCompactNumber(totals.llmCallCount)}</strong>
+              </div>
+              <div>
+                <span>Tokens</span>
+                <strong>{formatCompactNumber(totalTokens)}</strong>
+              </div>
+              <div>
+                <span>Cost</span>
+                <strong>{formatCost(totals.cost)}</strong>
+              </div>
+            </div>
+          </div>
+          <div className="collab-agents-list">
+            {totals.rows.map((row) => (
+              <div key={row.task.id} className={`collab-agent-summary-row ${row.statusKind}`}>
+                <div className="collab-agent-summary-main">
+                  <span className="collab-agent-summary-title" title={row.task.title}>
+                    {stripInlineMarkdownFormatting(row.task.title || row.task.prompt || "Sub agent")}
+                  </span>
+                  <span className={`collab-agent-summary-status ${row.statusKind}`}>
+                    {row.statusLabel}
+                  </span>
+                </div>
+                <div className="collab-agent-summary-meta">
+                  <span>{formatRightPanelDuration(row.durationMs)}</span>
+                  <span>{formatCompactNumber(row.toolCallCount)} tools</span>
+                  <span>{formatCompactNumber(row.usage.inputTokens + row.usage.outputTokens)} tok</span>
+                  {onSelectTask ? (
+                    <button
+                      type="button"
+                      className="collab-agent-open-task"
+                      onClick={() => onSelectTask(row.task.id)}
+                    >
+                      Open
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}, (prev, next) =>
+  prev.visible === next.visible &&
+  prev.expanded === next.expanded &&
+  prev.totals === next.totals &&
+  prev.onSelectTask === next.onSelectTask &&
+  prev.rendererPerfLoggingEnabled === next.rendererPerfLoggingEnabled
+);
+
 function RightPanelComponent({
   task,
   workspace,
   events: rawEvents,
   sharedTaskEventUi = null,
   hasActiveChildren = false,
+  childTasks = [],
+  childEvents = [],
   runningTasks = [],
   queuedTasks = [],
   queueStatus,
@@ -1248,6 +1575,7 @@ function RightPanelComponent({
   const [expandedSections, setExpandedSections] = useState({
     progress: true,
     checklist: true,
+    collaborativeAgents: true,
     queue: true,
     folder: true,
     activeContext: true,
@@ -1725,6 +2053,16 @@ function RightPanelComponent({
   const showChecklistSection =
     !!stableChecklistState &&
     stableChecklistState.items.length > 0;
+  const collaborativeAgentTotals = useMemo(
+    () => getCollaborativeAgentTotals(childTasks, childEvents),
+    [childTasks, childEvents],
+  );
+  const showCollaborativeAgentsSection = Boolean(
+    collaborativeAgentTotals &&
+      (childTasks.length > 0 ||
+        task?.agentConfig?.collaborativeMode ||
+        task?.agentConfig?.multiLlmMode),
+  );
   const showQueueSection = totalQueueActive > 0;
   const showFolderSection = stableFiles.length > 0;
   const showActiveContextSection = stableConnectedActiveConnectors.length > 0 && !isLiveExecutionMode;
@@ -1925,6 +2263,15 @@ function RightPanelComponent({
         getChecklistStatusLabel={getChecklistStatusLabel}
       />
 
+      <CollaborativeAgentsSection
+        visible={showCollaborativeAgentsSection}
+        expanded={expandedSections.collaborativeAgents}
+        totals={collaborativeAgentTotals}
+        toggleSection={() => toggleSection("collaborativeAgents")}
+        onSelectTask={onSelectTask}
+        rendererPerfLoggingEnabled={rendererPerfLoggingEnabled}
+      />
+
       {/* Lineup Section */}
       <QueueSection
         visible={showQueueSection}
@@ -2070,6 +2417,8 @@ function areRightPanelPropsEqual(prev: RightPanelProps, next: RightPanelProps): 
     prev.workspace?.path === next.workspace?.path &&
     sharedEventsEqual &&
     prev.hasActiveChildren === next.hasActiveChildren &&
+    areChildTaskStatsEqual(prev.childTasks || [], next.childTasks || []) &&
+    areTaskEventListsEqual(prev.childEvents || [], next.childEvents || []) &&
     getTaskListSignature(prev.runningTasks || []) === getTaskListSignature(next.runningTasks || []) &&
     getTaskListSignature(prev.queuedTasks || []) === getTaskListSignature(next.queuedTasks || []) &&
     getQueueStatusSignature(prev.queueStatus) === getQueueStatusSignature(next.queueStatus) &&
