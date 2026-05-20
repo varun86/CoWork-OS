@@ -226,6 +226,71 @@ describe("EventTriggerService", () => {
     expect(history[0].taskId).toBe("new-task-1");
   });
 
+  it("sends create_task actions to an existing thread when configured", async () => {
+    const sendTaskMessage = vi.fn().mockResolvedValue({ queued: true });
+    const localDeps = makeDeps({ sendTaskMessage });
+    const localService = new EventTriggerService(localDeps);
+    localService.start();
+
+    const trigger = localService.addTrigger({
+      name: "Thread Follow-up",
+      enabled: true,
+      source: "channel_message",
+      conditions: [],
+      action: {
+        type: "create_task",
+        config: {
+          prompt: "Follow up on {{event.text}}",
+          runMode: "thread_follow_up",
+          targetTaskId: "task-existing",
+        },
+      },
+      workspaceId: "ws-1",
+    });
+
+    await localService.evaluateEvent(makeMessageEvent("deployment"));
+
+    expect(localDeps.createTask).not.toHaveBeenCalled();
+    expect(sendTaskMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "task-existing",
+        message: "Follow up on deployment",
+      }),
+    );
+    expect(localService.getHistory(trigger.id)[0]).toMatchObject({
+      actionResult: "thread_follow_up_sent",
+      taskId: "task-existing",
+    });
+  });
+
+  it("fails thread follow-up actions that are missing a target task", async () => {
+    const localDeps = makeDeps();
+    const localService = new EventTriggerService(localDeps);
+    localService.start();
+
+    const trigger = localService.addTrigger({
+      name: "Broken Thread Follow-up",
+      enabled: true,
+      source: "channel_message",
+      conditions: [],
+      action: {
+        type: "create_task",
+        config: {
+          prompt: "Follow up on {{event.text}}",
+          runMode: "thread_follow_up",
+        },
+      },
+      workspaceId: "ws-1",
+    });
+
+    await localService.evaluateEvent(makeMessageEvent("deployment"));
+
+    expect(localDeps.createTask).not.toHaveBeenCalled();
+    expect(localService.getHistory(trigger.id)[0]?.actionResult).toBe(
+      "error: Thread follow-up trigger is missing a target task",
+    );
+  });
+
   // ── send_message action ────────────────────────────────────────
 
   it("fires send_message action", async () => {
