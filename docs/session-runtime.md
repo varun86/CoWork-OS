@@ -33,6 +33,24 @@ The ownership split is:
 
 In practice, a managed session points at one backing task and optionally one backing team run. Managed-session events mirror sanitized task and daemon events so UI/backend consumers can observe one durable session stream without bypassing the task runtime.
 
+## Session Forks
+
+Forking creates a new task session from an existing one without starting execution. The forked task receives its own `sessionId` and task row, while lineage is retained through `branchFromTaskId`, optional `branchFromEventId`, and optional `branchLabel`.
+
+The source task is not mutated. The fork copies replayable history into the new task so the renderer can show the inherited conversation immediately and the executor can restore the same context when the user sends the next prompt. Replayable history includes user messages, assistant messages, timeline and agentic step events, task-list events, tool events, command output, artifacts, citations, progress, and snapshots that are useful for reconstructing the session.
+
+Fork behavior depends on the selected event:
+
+- forking from an assistant, timeline, or tool event copies history through that event
+- forking from a user-message event creates a backtrack point before that user prompt, so the next user prompt can steer the branch from that point
+- forking the whole task copies the usable session history through the latest replayable event
+
+A fork is a pending draft until the user sends a prompt. Creating the fork must not call `startTask`, enqueue execution, create a worktree, invoke an LLM, run tools, or emit a live task-start lifecycle. Pending fork drafts should render as idle even when their copied history contains recent active-looking events from the source session.
+
+When the user sends the first prompt in the forked task, execution follows the normal follow-up path. Before the first turn, `SessionRuntime.restoreFromEvents(...)` rebuilds the runtime mirror from the copied fork events so the new task has the inherited transcript, tool context, checklist state, and timeline context available to the model.
+
+In the sidebar, forked sessions are ordinary recent sessions and should appear near the top by recency. They are not nested under the source session. UI surfaces may still use `branchFromTaskId` to show a parent-thread link in the conversation header.
+
 ## Tool Availability and Rendering
 
 SessionRuntime also owns the runtime-facing available-tools path used by execution and follow-up turns.
