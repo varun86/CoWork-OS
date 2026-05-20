@@ -311,9 +311,9 @@ If the modal opens but **Save** is disabled:
 1. Confirm the automation name is not empty.
 2. Confirm the prompt is not empty.
 3. Confirm the schedule is valid. `Custom` requires a non-empty cron expression.
-4. Use `Chat` or `Local`; `Worktree` is currently disabled until scheduled tasks can preserve task worktree context.
+4. Use `Chat` or `Local` for `Continue thread`; worktree-style automation must use `New task`.
 
-If **Save** returns an inline error, the modal is showing the `addCronJob` failure from the scheduler API. Check `Settings > Automations > Scheduled Tasks` after a successful save; task-sourced automations are stored there like any other cron job.
+If **Save** returns an inline error, the modal is showing the routine creation or compiled-backend failure. Check `Settings > Automations > Routines` after a successful save; schedule-triggered routines also appear in `Settings > Automations > Scheduled Tasks` as compiled cron jobs.
 
 ## Chronicle desktop screen context issues
 
