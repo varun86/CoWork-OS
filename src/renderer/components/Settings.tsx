@@ -234,6 +234,10 @@ interface SettingsProps {
   onUiDensityChange: (density: UiDensity) => void;
   devRunLoggingEnabled: boolean;
   onDevRunLoggingEnabledChange: (enabled: boolean) => void;
+  homeResearchVaultEnabled: boolean;
+  homeNextActionsEnabled: boolean;
+  onHomeResearchVaultEnabledChange: (enabled: boolean) => void;
+  onHomeNextActionsEnabledChange: (enabled: boolean) => void;
   initialTab?: SettingsTab;
   onShowOnboarding?: () => void;
   onboardingCompletedAt?: string;
@@ -1125,6 +1129,10 @@ export function Settings({
   onUiDensityChange,
   devRunLoggingEnabled,
   onDevRunLoggingEnabledChange,
+  homeResearchVaultEnabled,
+  homeNextActionsEnabled,
+  onHomeResearchVaultEnabledChange,
+  onHomeNextActionsEnabledChange,
   initialTab = "appearance",
   onShowOnboarding,
   onboardingCompletedAt,
@@ -7707,6 +7715,10 @@ export function Settings({
                 onUiDensityChange={onUiDensityChange}
                 devRunLoggingEnabled={devRunLoggingEnabled}
                 onDevRunLoggingEnabledChange={onDevRunLoggingEnabledChange}
+                homeResearchVaultEnabled={homeResearchVaultEnabled}
+                homeNextActionsEnabled={homeNextActionsEnabled}
+                onHomeResearchVaultEnabledChange={onHomeResearchVaultEnabledChange}
+                onHomeNextActionsEnabledChange={onHomeNextActionsEnabledChange}
                 onShowOnboarding={onShowOnboarding}
                 onboardingCompletedAt={onboardingCompletedAt}
               />
