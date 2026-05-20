@@ -286,7 +286,7 @@ export function setupCanvasHandlers(mainWindow: BrowserWindow, agentDaemon: Agen
 
   // Handle A2UI action from canvas window (internal IPC from canvas preload)
   ipcMain.handle(
-    "canvas:a2ui-action-from-window",
+    IPC_CHANNELS.CANVAS_A2UI_ACTION_FROM_WINDOW,
     async (
       event,
       action: {
@@ -305,7 +305,7 @@ export function setupCanvasHandlers(mainWindow: BrowserWindow, agentDaemon: Agen
 
   // Get session info from canvas window (internal IPC from canvas preload)
   ipcMain.handle(
-    "canvas:get-session-from-window",
+    IPC_CHANNELS.CANVAS_GET_SESSION_FROM_WINDOW,
     async (
       event,
     ): Promise<{
@@ -334,7 +334,7 @@ export function setupCanvasHandlers(mainWindow: BrowserWindow, agentDaemon: Agen
 
   // Request snapshot from canvas window (internal IPC from canvas preload)
   ipcMain.handle(
-    "canvas:request-snapshot-from-window",
+    IPC_CHANNELS.CANVAS_REQUEST_SNAPSHOT_FROM_WINDOW,
     async (
       event,
     ): Promise<{
@@ -353,7 +353,7 @@ export function setupCanvasHandlers(mainWindow: BrowserWindow, agentDaemon: Agen
   );
 
   // Log from canvas window (internal IPC from canvas preload)
-  ipcMain.on("canvas:log", (event, data: { message: string; data?: unknown }) => {
+  ipcMain.on(IPC_CHANNELS.CANVAS_LOG, (event, data: { message: string; data?: unknown }) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     const sessionId = window ? manager.getSessionFromWindow(window) : "unknown";
     console.log(`[Canvas:${sessionId?.slice(0, 8)}] ${data.message}`, data.data || "");
