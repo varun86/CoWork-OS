@@ -67,7 +67,7 @@ import {
   DEFAULT_CHANNEL_CONTEXT,
   type ChannelMessageContext,
 } from "../../shared/channelMessages";
-import { DEFAULT_QUIRKS } from "../../shared/types";
+import { DEFAULT_QUIRKS, IPC_CHANNELS } from "../../shared/types";
 import { getUnsupportedManualEmailSetupMessage } from "../../shared/email-provider-support";
 import {
   MICROSOFT_EMAIL_DEFAULT_TENANT,
@@ -753,7 +753,7 @@ export class ChannelGateway {
   private emitUsersUpdated(channel: Channel): void {
     const mainWindow = this.router.getMainWindow();
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("gateway:users-updated", {
+      mainWindow.webContents.send(IPC_CHANNELS.GATEWAY_USERS_UPDATED, {
         channelId: channel.id,
         channelType: channel.type,
       });
@@ -1592,16 +1592,16 @@ export class ChannelGateway {
       adapter.onQrCode((qr: string) => {
         console.log("WhatsApp QR code received, forwarding to renderer");
         if (!mainWindow.isDestroyed()) {
-          mainWindow.webContents.send("whatsapp:qr-code", qr);
+          mainWindow.webContents.send(IPC_CHANNELS.WHATSAPP_QR_CODE, qr);
         }
       });
 
       adapter.onStatusChange((status, error) => {
         console.log(`WhatsApp status changed to: ${status}`);
         if (!mainWindow.isDestroyed()) {
-          mainWindow.webContents.send("whatsapp:status", { status, error: error?.message });
+          mainWindow.webContents.send(IPC_CHANNELS.WHATSAPP_STATUS, { status, error: error?.message });
           if (status === "connected") {
-            mainWindow.webContents.send("whatsapp:connected");
+            mainWindow.webContents.send(IPC_CHANNELS.WHATSAPP_CONNECTED);
             // Update channel status in database
             this.channelRepo.update(channelId, {
               enabled: true,
