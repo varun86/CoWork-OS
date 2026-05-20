@@ -39,14 +39,15 @@
 - **GUI-first AI Super App, Everything App, and Personal Agentic OS**: CoWork OS is a local-first super app for everyday AI work: coding, email, web design, research, documents, spreadsheets, presentations, automations, channels, devices, and long-running tasks in one governed workspace.
 - **GUI-first Agent Management**: Agents Hub, Mission Control, task timelines, visual boards, Teams, Devices, and Automations let users create reusable agents, spawn many parallel or specialized agents, inspect delegated runs, assign work, review approvals, and monitor outcomes without living in a CLI.
 - **Everything Workbench**: Generated documents, spreadsheets, presentations, web pages, PDFs, and previews share one artifact model: compact output card, sidebar open, fullscreen artifact workspace, follow-up composer, and refresh after the agent completes requested edits. This makes CoWork the default place to create, inspect, and revise everyday Word/Excel/PowerPoint-style work while keeping external app actions available for advanced native workflows. See [Everything Workbench](everything-workbench.md).
+- **Terminal Tabs**: CoWork now includes real xterm.js + node-pty terminal tabs inside the workspace, with native macOS login-shell behavior, Windows `cmd.exe` through ConPTY/winpty, keyboard shortcuts, Tab completion, Ctrl+C, interactive prompts, resizing, closeable tabs, and cwd-only prompts. This is a major super-app step because direct CLI work, repository work, agents, artifacts, browser testing, approvals, channels, and automations can stay in one governed workspace. See [Terminal Tabs](terminal-tabs.md).
 - **Browser Workbench / Browser V2**: live website and local-app testing opens in a visible right-sidebar/fullscreen browser by default. Browser-use tools target the same webview the user can see through Browser V2, with responsive viewport testing through `browser_emulate`, accessibility snapshot refs, CDP-backed actions, tabs, diagnostics, screenshots, annotation, and visible cursor movement during agent actions. See [Browser Workbench](browser-workbench.md) and [Browser V2 Architecture](browser-v2-architecture.md).
 - **Task-Based Workflow**: Multi-step execution with plan-execute-observe loops
-- **Task Overflow Actions**: task view title menus expose supported task actions in place: pin/unpin, rename, archive, copy working directory, copy task ID, copy `cowork://tasks/<taskId>` deeplink, copy Markdown, fork session, view outputs, and create a scheduled automation from the current task. See [Task Automations](task-automations.md).
+- **Task Overflow Actions**: task view title menus expose supported task actions in place: pin/unpin, rename, archive, copy working directory, copy task ID, copy `cowork://tasks/<taskId>` deeplink, copy Markdown, fork session, view outputs, and create a same-thread or new-task automation from the current task. See [Task Automations](task-automations.md).
 - **Managed Agents**: Agents Hub provides a dedicated surface for creating, inspecting, publishing, suspending, and improving reusable agents. Agent detail screens are configuration-first and single-pane: test, preview, and starter-prompt actions create normal runtime managed sessions and open their backing tasks in the main task window, where questions, responses, approvals, artifacts, and outputs are handled like any other task. See [Managed Agents](managed-agents.md).
 - **Runtime Orchestration**: SessionRuntime owns task-session state, session checklists, resume snapshots, recovery state, and task projection while the turn kernel handles each individual step, follow-up, or text turn; metadata-driven tool scheduling, graph-backed delegation, typed worker roles, verifier verdicts, semantic tool-batch summaries, and terminal-state reconciliation keep delegated work coherent across tasks, follow-ups, teams, and ACP runs.
 - **Prompt-Aware Tooling**: visible tools receive concise prompt-local guidance after policy filtering, and planning plus execution share the same render source for compact tool text and provider-facing tool descriptions.
 - **Composer Mentions**: type `@` in the main composer to choose Agents, configured Integrations, or Files. Integration mentions render as icon+name chips and add soft runtime routing guidance without changing permissions. See [Composer Mentions](composer-mentions.md).
-- **Message Box Shortcuts**: type `/` in the main composer to search deterministic app commands and skill-backed workflow shortcuts in one picker. App commands include `/schedule`, `/clear`, `/plan`, `/cost`, `/multitask`, `/compact`, `/doctor`, and `/undo`; plugin-pack aliases resolve to their target skills through the existing skills runtime. Skill-backed selections insert the command token so users can add context before sending. See [Message Box Shortcuts](message-box-shortcuts.md) and [Multitask Command](multitask.md).
+- **Message Box Shortcuts**: type `/` in the main composer to search deterministic app commands and skill-backed workflow shortcuts in one picker. App commands include `/schedule`, `/clear`, `/plan`, `/cost`, `/multitask`, `/compact`, `/doctor`, and `/undo`; `/schedule here ...` targets the selected thread for a scheduled follow-up. Plugin-pack aliases resolve to their target skills through the existing skills runtime. Skill-backed selections insert the command token so users can add context before sending. See [Message Box Shortcuts](message-box-shortcuts.md) and [Multitask Command](multitask.md).
 - **Sectioned Prompt Stack**: execution and follow-up prompts are built from named session- and turn-scoped sections with explicit budgets, memoization of stable sections, provider-aware prompt caching, and truncation/drop reporting when token pressure rises.
 - **Provider-Aware Prompt Caching**: CoWork keeps stable system blocks cacheable and dynamic turn context uncached, prefers Anthropic automatic caching where supported, uses explicit Claude breakpoints on OpenRouter, and derives stable OpenAI-family cache keys for GPT routes.
 - **OpenRouter Pareto Code Routing**: OpenRouter model selection includes `openrouter/pareto-code` and `openrouter/pareto-code:nitro`. When selected, Settings exposes OpenRouter's optional Pareto minimum coding score as a decimal from `0` to `1` so coding tasks can route by capability tier without pinning one concrete model.
@@ -54,7 +55,7 @@
 - **Session Checklist Primitive**: execution-style tasks can create a session-local ordered checklist with `task_list_create`, maintain it with `task_list_update`, inspect it with `task_list_list`, and surface it read-only in the task UI. The runtime can issue a non-blocking verification nudge when implementation items are done but no verification item exists yet.
 - **Structured Delegation Briefs**: `spawn_agent` and `orchestrate_agents` resolve a worker role, package parent-step context plus evidence requirements into a structured brief, and apply the corresponding completion/tool contract to the child.
 - **Permission Engine**: layered tool approvals combine explicit modes, per-tool/path/command-prefix/MCP-server rules, session grants, workspace-local rules, profile rules, and hard guardrails; `dangerous_only` adds a lower-friction mode that still prompts on destructive, privacy-sensitive, side-effecting, or ambiguous actions.
-- **Live Terminal**: Shell commands run in a real-time terminal view — see output as it happens, stop execution, or provide interactive input (e.g. `y`/`n` prompts)
+- **Live Terminal Tabs**: Shell work can happen in real PTY-backed terminal tabs. xterm.js handles rendering and keyboard input, node-pty handles OS pseudoterminals, users can create/close tabs, resize the dock, use arrows/Tab/Ctrl+C, and interact with native CLI flows such as `npm login`. See [Terminal Tabs](terminal-tabs.md).
 - **Dynamic Re-Planning**: Agent can revise its plan mid-execution
 - **150 Built-in Skills**: GitHub, Slack, Notion, Spotify, Apple Notes, Unity, Unreal, Terraform, Kubernetes, financial analysis, and more. Bundled workflows now include [LLM Wiki](llm-wiki.md) for persistent research vaults, [manim-video](skills/manim-video.md) for deterministic technical animation, [kami](skills/kami.md) for editorial PDFs and slide decks, [react-best-practices](skills/react-best-practices.md) for React and Next.js implementation work, and `taste-skill` for high-agency frontend design. Optional CLI-based skills (e.g. [aurl](skills/aurl.md) for OpenAPI/GraphQL APIs) appear when the binary is installed.
 - **Additive Skill Runtime**: Skills can still be proactively shortlisted from task semantics, but they now apply as additive context and scoped runtime directives. They never replace the original task prompt. See [Skills Runtime Model](skills-runtime-model.md).
@@ -130,7 +131,7 @@ CoWork includes `llm-wiki` as a bundled first-class research-vault workflow insp
 - **Obsidian-friendly structure**: durable notes, maps, `[[wikilinks]]`, source-preserving `raw/` captures, and filed-back `outputs/`
 - **Deterministic workbench**: bundled runtimes handle raw ingest, vault-first search, slide/chart rendering, and graph analysis
 - **Deterministic maintenance**: bundled analyzer reports topology, orphan pages, broken links, ambiguous links, weakly linked pages, bridge pages, surprising cross-section links, and suggested follow-up questions
-- **GUI-first and slash-friendly**: natural prompts like `Build a persistent research vault for GRPO papers` route into `llm-wiki`, `/llm-wiki` remains available in desktop and supported gateway channels, and the welcome screen surfaces the default vault for browsing
+- **GUI-first and slash-friendly**: natural prompts like `Build a persistent research vault for GRPO papers` route into `llm-wiki`, and `/llm-wiki` remains available in desktop and supported gateway channels. The optional welcome-screen vault browser is off by default and can be enabled from **Settings > Appearance > Home widgets > Show research vault**.
 - **Run artifacts + durable state**: each run writes an inspectable manifest and graph report while keeping the vault itself persistent in the workspace
 
 See [LLM Wiki](llm-wiki.md) for command syntax, layout, modes, and analyzer behavior.
@@ -212,7 +213,7 @@ Automation features are now grouped together in `Settings > Automations`:
 - **Workflow Intelligence**: Memory, Heartbeat, internal Reflection, Dreaming, and reviewable Suggestions form one always-on runtime owned by automation profiles
 - **Task Queue**: concurrency, queueing, and background execution policy
 - **Workflow Intelligence settings**: target-scoped evidence, hypotheses, critique, winner selection, suggestion dispatch, feedback learning, and guarded auto-create policy
-- **Scheduled Tasks**: recurring time-based task execution; now also used as a compiled backend for routine schedule triggers and as the backend for task-sourced `Add automation...` flows
+- **Scheduled Tasks**: recurring time-based task execution; now also used as a compiled backend for routine schedule triggers, including task-sourced routines created from `Add automation...`
 - **Webhooks**: inbound automation entry points; now also used as a compiled backend for routine API triggers
 - **Event Triggers**: condition-based actions triggered by channel, webhook, or runtime events; now also used as a compiled backend for routine event triggers
 - **Daily Briefing**: scheduled summaries with workspace, memory, and evolution context
@@ -228,7 +229,7 @@ Ownership model:
 
 The home dashboard also surfaces recent automation runs so background work is visible without opening Settings. See [Core Automation](core-automation.md).
 
-Task view can also create a low-level scheduled task directly from the selected task with `... > Add automation...`. That popup is prefilled from the task title/prompt, appends a source task reference and `cowork://tasks/<taskId>` deeplink to the saved prompt, and calls the existing cron scheduled-task API. See [Task Automations](task-automations.md).
+Task view can also create a task-sourced routine from the selected task with `... > Add automation...`. The popup is prefilled from the task title/prompt, keeps the source task reference and `cowork://tasks/<taskId>` deeplink, continues the same thread by default, and compiles schedule/API/event triggers to the lower-level cron, webhook, or event engines as needed. See [Task Automations](task-automations.md).
 
 ### Routines
 
@@ -290,7 +291,7 @@ See [Zero-Human Company Operations](zero-human-company.md) for architecture, set
 - **Memory as source of truth**: reflection outputs become memory candidates such as preferences, workflow patterns, open loops, corrections, recurring tasks, and ignored noise
 - **Heartbeat as scheduler**: Heartbeat decides when accumulated signals justify reflection
 - **Dreaming as memory curation**: background Dreaming runs after meaningful task completion or memory-specific Heartbeat signals, then proposes reviewable memory candidates instead of silently rewriting memory
-- **Reviewable suggestions first**: useful outcomes appear as Next actions under the welcome message box, in the automation inbox, and in the Suggestions panel
+- **Reviewable suggestions first**: useful outcomes appear in the automation inbox and Suggestions panel. The optional welcome-screen **Next actions** widget is off by default and can be enabled from **Settings > Appearance > Home widgets > Show next actions**.
 - **Global coordinator, namespaced targets**: one coordinator ranks work globally while each workflow target keeps its own history, winner, backlog, and dispatch stream
 - **Stable target identities**: supports core-owned targets such as `global`, `workspace`, `agent_role`, `code_workspace`, and `pull_request`
 - **Fixed reflective pipeline**: collect evidence, generate 3-5 hypotheses, critique them, synthesize one winner, write backlog, and create a suggestion by default
@@ -1085,6 +1086,19 @@ Three-tier UI density controlling which features and settings are visible:
 
 Configure in **Settings** > **Appearance**.
 
+### Optional Home Widgets
+
+The welcome-screen **Research vault** and **Next actions** cards are opt-in. New and existing profiles default both widgets to disabled so the composer stays focused unless the user chooses otherwise.
+
+To enable them:
+
+1. Open **Settings > Appearance**.
+2. Find **Home widgets**.
+3. Turn on **Show research vault** to display the workspace-local `research/wiki` browser near the composer.
+4. Turn on **Show next actions** to display Workflow Intelligence suggestions under the welcome message box.
+
+When disabled, CoWork does not render those cards and skips their home-screen data loads.
+
 ---
 
 ## Configurable Guardrails
@@ -1590,9 +1604,10 @@ Configure in **Settings** > **Appearance**.
 Schedule recurring tasks with cron expressions and optional channel delivery.
 
 - Standard cron syntax with workspace binding
-- Create from an existing task with task view `... > Add automation...`
-- Task-sourced jobs preserve a source task title, task ID, and `cowork://tasks/<taskId>` deeplink in the scheduled prompt/description
-- Run mode presets: `Chat` for no-shell unattended work, `Local` for shell-enabled workspace work; task worktree mode is shown disabled until cron jobs can preserve worktree context
+- Run standalone scheduled tasks from Settings, or use task view `... > Add automation...` to create a routine that compiles to a scheduled task when it has a schedule trigger
+- Task-sourced scheduled jobs preserve a source task title, task ID, and `cowork://tasks/<taskId>` deeplink in the compiled prompt/description
+- Target modes: create a new task for each run or continue an existing task thread with a scheduled follow-up
+- Run mode presets: `Chat` for no-shell unattended work, `Local` for shell-enabled workspace work; worktree automation is forced to new-task execution instead of continuing a thread
 - Channel delivery to any of the 17 channels through the shared gateway delivery path, with idempotency, formatting, chunking, and outbox retry behavior aligned with normal chat replies
 - Conditional delivery (`deliverOnlyIfResult`)
 - Template variables: `{{today}}`, `{{tomorrow}}`, `{{week_end}}`, `{{now}}`
