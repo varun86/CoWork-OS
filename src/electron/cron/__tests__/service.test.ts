@@ -894,6 +894,51 @@ describe("CronService", () => {
       );
     });
 
+    it("should send thread follow-up jobs to the target task instead of creating a new task", async () => {
+      const sendTaskMessage = vi
+        .fn()
+        .mockResolvedValue({ queued: true }) as CronServiceDeps["sendTaskMessage"];
+      service = createService({ sendTaskMessage });
+      await service.start();
+
+      await service.add({
+        name: "Continue Existing Task",
+        enabled: true,
+        workspaceId: "ws-1",
+        taskPrompt: "Check the latest status.",
+        schedule: { kind: "every", everyMs: 60000 },
+        runMode: "thread_follow_up",
+        targetTaskId: "task-existing",
+        threadAutomation: {
+          sourceTaskId: "task-existing",
+          sourceTaskTitle: "Original Work",
+          wakeObjective: "Follow up on open loops",
+        },
+      });
+
+      const result = await service.run("job-1", "force");
+
+      expect(result.ok).toBe(true);
+      expect(mockCreateTask).not.toHaveBeenCalled();
+      expect(sendTaskMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: "task-existing",
+          message: expect.stringContaining("Scheduled thread wake:"),
+        }),
+      );
+      expect(sendTaskMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining("Check the latest status."),
+        }),
+      );
+      const history = await service.getRunHistory("job-1");
+      expect(history?.entries[0]).toMatchObject({
+        status: "ok",
+        taskId: "task-existing",
+        runMode: "thread_follow_up",
+      });
+    });
+
     it("should handle createTask errors", async () => {
       const errorCreateTask = vi
         .fn()
