@@ -701,6 +701,42 @@ const PARALLEL_TOOL_CALL_EXPLICIT_DENYLIST = new Set<string>([
   "show_in_folder",
 ]);
 
+const SAFE_INTEGRATION_MENTION_TOOL_ALLOWLIST = new Set<string>([
+  "gmail_action",
+  "gmail_search_emails",
+  "gmail_search_email_ids",
+  "gmail_batch_read_email",
+  "gmail_read_email_thread",
+  "gmail_create_draft",
+  "gmail_list_drafts",
+  "gmail_update_draft",
+  "gmail_send_draft",
+  "gmail_send_email",
+  "gmail_apply_labels_to_emails",
+  "gmail_bulk_label_matching_emails",
+  "gmail_forward_emails",
+  "notion_action",
+  "box_action",
+  "onedrive_action",
+  "mailbox_action",
+  "dropbox_action",
+  "sharepoint_action",
+  "google_drive_action",
+  "calendar_action",
+  "browser_navigate",
+  "browser_snapshot",
+  "browser_click",
+  "browser_fill",
+  "browser_type",
+  "browser_press",
+  "browser_screenshot",
+  "browser_get_content",
+  "browser_get_text",
+  "browser_evaluate",
+  "browser_wait",
+  "browser_scroll",
+]);
+
 const isLLMImageContent = (block: LLMContent): block is LLMImageContent => {
   return (
     block.type === "image" && typeof block.data === "string" && typeof block.mimeType === "string"
@@ -3817,6 +3853,62 @@ export class TaskExecutor {
     return normalized;
   }
 
+  private taskPromptExplicitlyNamesPersonalSearchLocations(): boolean {
+    const taskText = `${this.task?.title || ""}\n${this.getContractPrompt() || ""}\n${this.task?.prompt || ""}\n${this.task?.rawPrompt || ""}`;
+    return /\b(?:desktop|downloads?|movies?|documents?|home\s+directory|media\s+folder|personal\s+folders?)\b/i.test(
+      taskText,
+    );
+  }
+
+  private normalizeOutOfWorkspaceDiscoveryPlanSteps(steps: PlanStep[]): PlanStep[] {
+    if (this.taskPromptExplicitlyNamesPersonalSearchLocations()) {
+      return steps;
+    }
+
+    return steps.map((step) => {
+      const description = String(step.description || "");
+      if (!descriptionHasDiscoveryIntent(description)) {
+        return step;
+      }
+
+      const namesLikelyPersonalFolders =
+        /\b(?:desktop|downloads?|movies?|documents?|home\s+directory|likely\s+(?:media\s+)?folders?|common\s+(?:media\s+)?folders?|personal\s+folders?)\b/i.test(
+          description,
+        );
+      if (!namesLikelyPersonalFolders) {
+        return step;
+      }
+
+      return {
+        ...step,
+        description:
+          "Search the selected workspace for the required source files; ask for a path if they are not present there.",
+      };
+    });
+  }
+
+  private isNonExecutableFormatListPlanStep(description: string): boolean {
+    const desc = String(description || "").toLowerCase();
+    if (!desc.trim()) return false;
+
+    const formatListCue =
+      /\bsupported\s+(?:likely\s+)?(?:source\/output\s+)?(?:file\s+)?formats?\b/.test(desc) ||
+      /\blikely\s+(?:source\/output\s+)?formats?\b/.test(desc);
+    if (!formatListCue) return false;
+
+    const extensionCount = (desc.match(/\.(?:mp4|mov|m4v|webm|avi|mkv|pdf|docx|xlsx|pptx|md|txt|json|csv)\b/g) || [])
+      .length;
+    if (extensionCount < 2) return false;
+
+    return !/\b(create|write|save|export|convert|combine|merge|join|stitch|transcode|remux)\b/.test(
+      desc,
+    );
+  }
+
+  private dropNonExecutablePlanSteps(steps: PlanStep[]): PlanStep[] {
+    return steps.filter((step) => !this.isNonExecutableFormatListPlanStep(step.description));
+  }
+
   private sanitizePlan(plan: Plan): Plan {
     const novelistConstraintContext = this.getNovelistConstraintContext();
     const sanitizedPlanDescription = this.rewriteNovelistPlanDescription(
@@ -3871,14 +3963,17 @@ export class TaskExecutor {
       this.taskPinnedRootSource = "fallback";
     }
 
-    const scaffoldRoot = this.inferScaffoldRootFromPlanSteps(normalizedSteps);
+    const executableSteps = this.dropNonExecutablePlanSteps(
+      this.normalizeOutOfWorkspaceDiscoveryPlanSteps(normalizedSteps),
+    );
+    const scaffoldRoot = this.inferScaffoldRootFromPlanSteps(executableSteps);
     this.planScaffoldRoot = scaffoldRoot;
     const rootedSteps = scaffoldRoot
-      ? normalizedSteps.map((step) => ({
+      ? executableSteps.map((step) => ({
           ...step,
           description: this.anchorDescriptionPathsToScaffoldRoot(step.description, scaffoldRoot),
         }))
-      : normalizedSteps;
+      : executableSteps;
 
     const overlapNormalizedSteps = this.normalizeOverlappingPlanSteps(rootedSteps);
     const aliasNormalizedSteps = this.normalizeWorkspaceAliasPathsInPlanSteps(overlapNormalizedSteps);
@@ -5143,10 +5238,27 @@ ${transcript}
   }
 
   private buildToolRegistry(workspace: Workspace): ToolRegistry {
+    const desc = this.task.title || "";
+    const isReadOnlyReview =
+      descriptionHasReadOnlyIntent(desc) && !descriptionHasWriteIntent(desc);
     const toolRestrictions = [
       ...(this.task.agentConfig?.toolRestrictions || []),
       ...(this.task.agentConfig?.chronicleMode === "disabled"
         ? ["screen_context_resolve"]
+        : []),
+      ...(isReadOnlyReview
+        ? [
+            "group:system",
+            "take_screenshot",
+            "type_text",
+            "screenshot",
+            "click",
+            "double_click",
+            "move_mouse",
+            "drag",
+            "scroll",
+            "keypress",
+          ]
         : []),
     ];
     const registry = new ToolRegistry(
@@ -9683,7 +9795,48 @@ ${transcript}
     });
   }
 
+  private planContainsVideoArtifactStep(steps: PlanStep[]): boolean {
+    return steps.some((step) => {
+      const desc = String(step?.description || "").toLowerCase();
+      if (!desc.trim()) return false;
+      if (this.isNonExecutableFormatListPlanStep(desc)) return false;
+      const hasVideoTarget =
+        /\.(?:mp4|mov|m4v|webm|avi|mkv)\b/.test(desc) ||
+        /\b(video|clip|movie|footage)\b/.test(desc);
+      if (!hasVideoTarget) return false;
+      return /\b(create|generate|write|save|produce|export|build|make|combine|merge|join|stitch|concatenate|concat|transcode|remux)\b/.test(
+        desc,
+      );
+    });
+  }
+
+  private nextPlanStepId(steps: PlanStep[]): string {
+    const maxNumericId = steps.reduce((max, step) => {
+      const parsed = Number.parseInt(String(step?.id || ""), 10);
+      return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
+    }, 0);
+    return String(Math.max(maxNumericId, steps.length) + 1);
+  }
+
+  private extractRequestedArtifactBaseNameFromTask(): string | null {
+    const taskText = `${this.getContractPrompt() || ""}\n${this.task?.prompt || ""}\n${this.task?.rawPrompt || ""}\n${this.task?.title || ""}`;
+    const quotedName =
+      /\b(?:named|called|titled|save(?:d)?\s+(?:it\s+)?as)\s+(?:a\s+new\s+\w+\s+)?["“”']([^"“”']{1,160})["“”']/i.exec(
+        taskText,
+      )?.[1] || "";
+    const raw = quotedName.trim();
+    if (!raw) return null;
+    const sanitized = raw.replace(/[\\/:*?"<>|]+/g, "").replace(/\s+/g, " ").trim();
+    return sanitized || null;
+  }
+
   private buildTaskArtifactFilename(extension: string): string {
+    const explicitBaseName = this.extractRequestedArtifactBaseNameFromTask();
+    if (explicitBaseName) {
+      const ext = extension.startsWith(".") ? extension : `.${extension}`;
+      if (path.extname(explicitBaseName)) return explicitBaseName;
+      return `${explicitBaseName}${ext}`;
+    }
     const source = String(this.task?.title || this.getContractPrompt() || "task_output")
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "_")
@@ -9703,6 +9856,17 @@ ${transcript}
     return `Create the final PowerPoint presentation \`${filename}\` with the completed slide content.`;
   }
 
+  private buildVideoArtifactPlanStepDescription(): string {
+    const filename = this.buildTaskArtifactFilename(".mp4");
+    const taskText = `${this.task?.title || ""}\n${this.getContractPrompt() || ""}`.toLowerCase();
+    const ordering =
+      /\blonger\b[\s\S]{0,80}\bfirst\b/.test(taskText) ||
+      /\bfirst\b[\s\S]{0,80}\blonger\b/.test(taskText)
+        ? " with the longer source video first"
+        : "";
+    return `Create the final combined video file \`${filename}\`${ordering}.`;
+  }
+
   private ensureRequiredPlanSteps(plan: Plan): Plan {
     const nextPlan: Plan = {
       ...plan,
@@ -9719,7 +9883,7 @@ ${transcript}
       !this.planContainsXlsxArtifactStep(nextPlan.steps)
     ) {
       nextPlan.steps.push({
-        id: String(nextPlan.steps.length + 1),
+        id: this.nextPlanStepId(nextPlan.steps),
         description: this.buildXlsxArtifactPlanStepDescription(),
         kind: "primary",
         status: "pending",
@@ -9730,8 +9894,19 @@ ${transcript}
       !this.planContainsPptxArtifactStep(nextPlan.steps)
     ) {
       nextPlan.steps.push({
-        id: String(nextPlan.steps.length + 1),
+        id: this.nextPlanStepId(nextPlan.steps),
         description: this.buildPptxArtifactPlanStepDescription(),
+        kind: "primary",
+        status: "pending",
+      });
+    }
+    if (
+      requiredArtifactExtensions.includes(".mp4") &&
+      !this.planContainsVideoArtifactStep(nextPlan.steps)
+    ) {
+      nextPlan.steps.push({
+        id: this.nextPlanStepId(nextPlan.steps),
+        description: this.buildVideoArtifactPlanStepDescription(),
         kind: "primary",
         status: "pending",
       });
@@ -9743,7 +9918,7 @@ ${transcript}
       !this.planContainsVisualQAStep(nextPlan.steps)
     ) {
       nextPlan.steps.push({
-        id: String(nextPlan.steps.length + 1),
+        id: this.nextPlanStepId(nextPlan.steps),
         description: this.buildVisualQAPlanStepDescription(),
         kind: "verification",
         status: "pending",
@@ -9983,6 +10158,7 @@ ${transcript}
         desc,
       ) ||
       /\b(?:shell|terminal)\s+command\b/.test(desc) ||
+      /\b(?:ffmpeg|ffprobe|mediainfo)\b/.test(desc) ||
       /\bcommand\b[\s\S]{0,40}\bcurrent session context\b/.test(desc) ||
       /\bcommand\b[\s\S]{0,40}\b(?:stdout|stderr|standard output|standard error|exit code|exit status|print(?:s)?|output(?:s)?|return(?:s)?|emit(?:s)?|produc(?:e|es))\b/.test(
         desc,
@@ -10016,10 +10192,16 @@ ${transcript}
       required.add(canonicalizeToolNameUtil("create_diagram"));
     }
 
+    const localVideoProcessingIntent =
+      /\b(ffmpeg|ffprobe|mediainfo|concat|concatenate|combine|merge|join|stitch|duration|codec|container|transcode|remux|source videos?)\b/.test(
+        desc,
+      ) || /\.(mp4|mov|m4v|webm|avi|mkv)\b/.test(desc);
     const videoGenerationIntent =
-      /\b(video generation tool|text-to-video|image-to-video)\b/.test(desc) ||
-      (/\b(video|clip|animation|footage|movie)\b/.test(desc) &&
-        /\b(call|invoke|run|execute|use|create|generate|produce|render)\b/.test(desc));
+      /\b(video generation tool|text-to-video|image-to-video|sora)\b/.test(desc) ||
+      (!localVideoProcessingIntent &&
+        /\b(generate|create|produce|render|make)\b[\s\S]{0,40}\b(?:ai\s+|new\s+|short\s+)?(?:video|clip|animation|footage|movie)\b/.test(
+          desc,
+        ));
     if (videoGenerationIntent) {
       addRequiredToolIfKnown("generate_video");
     }
@@ -14121,6 +14303,10 @@ ${transcript}
       base.add(requiredTool);
     }
 
+    for (const mentionedIntegrationTool of this.getIntegrationMentionToolAllowlist()) {
+      base.add(mentionedIntegrationTool);
+    }
+
     if (taskDomain === "operations" && !nativeGuiGuard.nativeGuiIntent) {
       base.add("run_command");
     }
@@ -14153,6 +14339,44 @@ ${transcript}
       base.add("wait");
     }
     return base;
+  }
+
+  private getIntegrationMentionToolAllowlist(): Set<string> {
+    const allowed = new Set<string>();
+    const mentions = this.task?.agentConfig?.integrationMentions;
+    if (!Array.isArray(mentions) || mentions.length === 0) return allowed;
+
+    for (const mention of mentions) {
+      const tools = Array.isArray(mention?.tools) ? mention.tools : [];
+      for (const tool of tools) {
+        const normalizedTool = typeof tool === "string" ? tool.trim() : "";
+        if (SAFE_INTEGRATION_MENTION_TOOL_ALLOWLIST.has(normalizedTool)) {
+          allowed.add(normalizedTool);
+        }
+      }
+
+      const label = String(mention?.label || "").toLowerCase();
+      const providerKey = String(mention?.providerKey || "").toLowerCase();
+      const id = String(mention?.id || "").toLowerCase();
+      const hasGmailTool = tools.some((tool) => typeof tool === "string" && tool.includes("gmail"));
+      if (label === "gmail" || providerKey.includes("gmail") || id.includes("gmail") || hasGmailTool) {
+        allowed.add("gmail_action");
+        allowed.add("gmail_search_emails");
+        allowed.add("gmail_search_email_ids");
+        allowed.add("gmail_batch_read_email");
+        allowed.add("gmail_read_email_thread");
+        allowed.add("gmail_create_draft");
+        allowed.add("gmail_list_drafts");
+        allowed.add("gmail_update_draft");
+        allowed.add("gmail_send_draft");
+        allowed.add("gmail_send_email");
+        allowed.add("gmail_apply_labels_to_emails");
+        allowed.add("gmail_bulk_label_matching_emails");
+        allowed.add("gmail_forward_emails");
+      }
+    }
+
+    return allowed;
   }
 
   private getNativeGuiGuardForStepText(stepText?: string): {
@@ -14549,9 +14773,22 @@ You are continuing a previous conversation. The context from the previous conver
 
     if (verification.type === "shell_command" && verification.command) {
       try {
-        const result = (await this.toolRegistry.executeTool("run_command", {
-          command: verification.command,
-        })) as { success: boolean; exitCode: number | null; stdout: string; stderr: string };
+        // Route through daemon for deduplication when possible — concurrent
+        // executors in the same workspace skip redundant identical commands.
+        let result: { success: boolean; exitCode?: number | null; stdout?: string; stderr?: string; output?: string };
+        if (this.daemon?.runWorkspaceVerification && this.workspace?.path) {
+          const deduped = await this.daemon.runWorkspaceVerification(
+            this.workspace.path,
+            verification.command,
+            this.task.id,
+            (name, args) => this.toolRegistry.executeTool(name, args) as Promise<{ success: boolean; output?: string }>,
+          );
+          result = { success: deduped.success, exitCode: deduped.success ? 0 : 1, stdout: deduped.output ?? "", stderr: "" };
+        } else {
+          result = (await this.toolRegistry.executeTool("run_command", {
+            command: verification.command,
+          })) as { success: boolean; exitCode: number | null; stdout: string; stderr: string };
+        }
 
         const ok = result.exitCode === 0;
         const msg =
@@ -20042,9 +20279,16 @@ You are continuing a previous conversation. The context from the previous conver
       return false;
     }
 
-    const sub = String(tokens.shift() || "")
+    let sub = String(tokens.shift() || "")
       .trim()
       .toLowerCase();
+    let scheduleTarget: "new_task" | "current_thread" = "new_task";
+    if (sub === "here" || sub === "thread" || sub === "conversation" || sub === "current") {
+      scheduleTarget = "current_thread";
+      sub = String(tokens.shift() || "")
+        .trim()
+        .toLowerCase();
+    }
 
     const helpText =
       "Usage:\n" +
@@ -20053,6 +20297,7 @@ You are continuing a previous conversation. The context from the previous conver
       "- /schedule weekdays <time> <prompt>\n" +
       "- /schedule weekly <mon|tue|...> <time> <prompt>\n" +
       "- /schedule every <interval> <prompt>\n" +
+      "- /schedule here every <interval> <prompt>\n" +
       "- /schedule at <YYYY-MM-DD HH:MM> <prompt>\n" +
       "- /schedule off <#|name|id>\n" +
       "- /schedule on <#|name|id>\n" +
@@ -20062,6 +20307,7 @@ You are continuing a previous conversation. The context from the previous conver
       "- /schedule weekdays 09:00 Run tests and post results.\n" +
       "- /schedule weekly mon 18:30 Send a weekly status update.\n" +
       "- /schedule every 6h Pull latest logs and summarize.\n" +
+      "- /schedule here every 1d Return to this conversation and update the open loops.\n" +
       "- /schedule at 2026-02-08 18:30 Remind me to submit expenses.";
 
     const logAssistant = (message: string) => {
@@ -20337,6 +20583,13 @@ You are continuing a previous conversation. The context from the previous conver
     if (!prompt) {
       throw new Error("Missing prompt. Example: `/schedule every 6h <prompt>`");
     }
+    if (
+      scheduleTarget === "new_task" &&
+      /\b(return|come back|continue|follow up|remind me|update me|check back)\b/i.test(prompt) &&
+      /\b(this|here|conversation|thread|task)\b/i.test(prompt)
+    ) {
+      scheduleTarget = "current_thread";
+    }
 
     const name = prompt.length > 48 ? `${prompt.slice(0, 48).trim()}...` : prompt;
     const description = `Created via /schedule (task=${this.task.id})`;
@@ -20357,6 +20610,7 @@ You are continuing a previous conversation. The context from the previous conver
             updates: {
               enabled: true,
               prompt,
+              target: scheduleTarget,
               schedule: scheduleInput,
             },
           })
@@ -20365,6 +20619,7 @@ You are continuing a previous conversation. The context from the previous conver
             name,
             description,
             prompt,
+            target: scheduleTarget,
             schedule: scheduleInput,
             enabled: true,
             deleteAfterRun: scheduleInput?.type === "once",
@@ -20385,6 +20640,7 @@ You are continuing a previous conversation. The context from the previous conver
       : "unknown";
     const msg =
       `✅ Scheduled "${job.name}".\n\n` +
+      (scheduleTarget === "current_thread" ? "Target: this conversation\n" : "") +
       `Schedule: ${scheduleDesc}\n` +
       `Next run: ${next}\n\n` +
       "You can view and edit it in Settings > Scheduled Tasks.";
@@ -20560,6 +20816,8 @@ You are continuing a previous conversation. The context from the previous conver
     invocationLabel: string,
     trigger: SkillApplicationTrigger,
   ): Promise<"applied" | "pending"> {
+    this.assertWorkspaceReviewSkillAllowed(skillId, invocationLabel);
+
     const input = {
       skill: skillId,
       args,
@@ -20592,6 +20850,24 @@ You are continuing a previous conversation. The context from the previous conver
       `${this.logTag} Skill '${skillId}' applied as hidden context via ${trigger}`,
     );
     return "applied";
+  }
+
+  private assertWorkspaceReviewSkillAllowed(skillId: string, invocationLabel: string): void {
+    if (String(skillId || "").trim() !== "code-reviewer") {
+      return;
+    }
+
+    const workspaceId = String(this.workspace?.id || "");
+    const isTemporaryWorkspace = Boolean(this.workspace?.isTemp) || isTempWorkspaceId(workspaceId);
+    if (!isTemporaryWorkspace) {
+      return;
+    }
+
+    const label = invocationLabel.startsWith("/") ? invocationLabel : "/review";
+    throw new Error(
+      `${label} requires a regular workspace with a real project folder. ` +
+        "Switch out of the temporary workspace and retry the review.",
+    );
   }
 
   private async runUseSkillFromSlash(command: ParsedSkillSlashCommand): Promise<void> {
@@ -31213,12 +31489,14 @@ Return ONLY a JSON object:
     images?: ImageAttachment[],
     quotedAssistantMessage?: QuotedAssistantMessage,
     integrationMentions?: TaskFollowUpInput["integrationMentions"],
+    agentConfigOverride?: TaskFollowUpInput["agentConfigOverride"],
   ): void {
     this.getSessionRuntime().queueFollowUp(
       message,
       images,
       quotedAssistantMessage,
       integrationMentions,
+      agentConfigOverride,
     );
     logger.info(
       `${this.logTag} Follow-up queued for injection into running execution (queue size: ${this.pendingFollowUps.length})`,
@@ -31628,9 +31906,17 @@ Return ONLY a JSON object:
     message: string,
     images?: ImageAttachment[],
     quotedAssistantMessage?: QuotedAssistantMessage,
+    options?: Pick<TaskFollowUpInput, "agentConfigOverride">,
   ): Promise<void> {
     await this.getLifecycleMutex().runExclusive(async () => {
-      await this.sendMessageUnlocked(message, images, quotedAssistantMessage);
+      const persistedAgentConfig = this.daemon.getTask(this.task.id)?.agentConfig ?? this.task.agentConfig;
+      try {
+        await this.sendMessageUnlocked(message, images, quotedAssistantMessage, options);
+      } finally {
+        if (options?.agentConfigOverride) {
+          this.updateTaskAgentConfig(persistedAgentConfig);
+        }
+      }
     });
   }
 
@@ -31638,7 +31924,14 @@ Return ONLY a JSON object:
     message: string,
     images?: ImageAttachment[],
     quotedAssistantMessage?: QuotedAssistantMessage,
+    options?: Pick<TaskFollowUpInput, "agentConfigOverride">,
   ): Promise<void> {
+    if (options?.agentConfigOverride) {
+      this.updateTaskAgentConfig({
+        ...(this.task.agentConfig || {}),
+        ...options.agentConfigOverride,
+      });
+    }
     if (this.isAcpxExternalRuntimeTask()) {
       try {
         await this.sendMessageWithAcpxRuntime(message, images, quotedAssistantMessage);
