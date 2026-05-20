@@ -21,6 +21,8 @@ import { ApprovalEventCard } from "./ApprovalEventCard";
 import { SummaryEventCard } from "./SummaryEventCard";
 
 const WINDOW_SIZE = 6;
+const VIRTUALIZE_THRESHOLD = 50;
+const MAX_SHOW_ALL_EVENTS = 200;
 const ESTIMATED_CARD_HEIGHT = 56;
 const ESTIMATED_TEXT_LINE_HEIGHT = 18;
 const TIMELINE_HORIZONTAL_CHROME = 96;
@@ -201,7 +203,7 @@ export function SemanticTimeline({
   const feedRef = useRef<HTMLDivElement>(null);
   const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
   const [containerWidth, setContainerWidth] = useState(0);
-  const useVirtual = !showAll && isPretextEnabled() && events.length > WINDOW_SIZE;
+  const useVirtual = events.length > VIRTUALIZE_THRESHOLD || (!showAll && isPretextEnabled() && events.length > WINDOW_SIZE);
 
   const activePhases = useMemo(() => {
     const phases = new Set<TimelinePhase>();
@@ -215,7 +217,7 @@ export function SemanticTimeline({
 
   const isVerbose = verbosity === "verbose";
   const isWindowed = !showAll;
-  const visibleEvents = isWindowed ? events.slice(-WINDOW_SIZE) : events;
+  const visibleEvents = isWindowed ? events.slice(-WINDOW_SIZE) : events.slice(-MAX_SHOW_ALL_EVENTS);
 
   // Auto-scroll to bottom in windowed mode when events change
   useEffect(() => {
