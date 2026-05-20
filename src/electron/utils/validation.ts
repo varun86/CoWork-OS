@@ -1054,8 +1054,25 @@ export const OneDriveSettingsSchema = z.object({
 
 export const GoogleWorkspaceSettingsSchema = z.object({
   enabled: z.boolean().default(false),
+  connectionMode: z.enum(["gmail", "workspace"]).optional(),
   clientId: z.string().max(4000).optional(),
   clientSecret: z.string().max(4000).optional(),
+  accounts: z
+    .array(
+      z.object({
+        email: z.string().email().max(254),
+        name: z.string().max(254).optional(),
+        accessToken: z.string().max(4000).optional(),
+        refreshToken: z.string().max(4000).optional(),
+        tokenExpiresAt: z.number().int().optional(),
+        scopes: z.array(z.string().max(200)).optional(),
+        connectionMode: z.enum(["gmail", "workspace"]).optional(),
+        connectedAt: z.number().int().optional(),
+      }),
+    )
+    .max(20)
+    .optional(),
+  activeAccountEmail: z.string().email().max(254).optional(),
   accessToken: z.string().max(4000).optional(),
   refreshToken: z.string().max(4000).optional(),
   tokenExpiresAt: z.number().int().optional(),
