@@ -43,6 +43,7 @@ import {
   AgentRole,
   Workspace,
   WorkspacePermissions,
+  IPC_CHANNELS,
   isTempWorkspaceId,
 } from "../../shared/types";
 import { AgentRoleRepository } from "../agents/AgentRoleRepository";
@@ -4814,7 +4815,7 @@ export class MessageRouter {
 
     // Notify desktop app via IPC (best-effort).
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send("gateway:message", {
+      this.mainWindow.webContents.send(IPC_CHANNELS.GATEWAY_MESSAGE, {
         channel: adapter.type,
         sessionId,
         taskId: task.id,
@@ -7101,7 +7102,7 @@ export class MessageRouter {
       });
 
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-        this.mainWindow.webContents.send("gateway:users-updated", {
+        this.mainWindow.webContents.send(IPC_CHANNELS.GATEWAY_USERS_UPDATED, {
           channelId: channel.id,
           channelType: adapter.type,
         });
@@ -7425,7 +7426,7 @@ export class MessageRouter {
 
     // Notify desktop app via IPC
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send("gateway:message", {
+      this.mainWindow.webContents.send(IPC_CHANNELS.GATEWAY_MESSAGE, {
         channel: adapter.type,
         sessionId,
         taskId: task.id,
