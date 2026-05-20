@@ -430,6 +430,21 @@ async function main(): Promise<void> {
         });
         return { id: task.id };
       },
+      sendTaskMessage: async (params) => {
+        const task = taskRepo.findById(params.taskId);
+        if (!task) {
+          throw new Error(`Target task not found: ${params.taskId}`);
+        }
+        return agentDaemon.sendMessage(params.taskId, params.message, undefined, undefined, {
+          agentConfigOverride:
+            params.agentConfig && Object.keys(params.agentConfig).length > 0
+              ? {
+                  ...params.agentConfig,
+                  allowUserInput: params.allowUserInput ?? params.agentConfig.allowUserInput,
+                }
+              : undefined,
+        });
+      },
       resolveTemplateVariables: async ({
         job,
         runAtMs,
