@@ -1,4 +1,4 @@
-import { useTranslation } from "react-i18next";
+import { useState } from "react";
 import { ThemeMode, AccentColor, VisualTheme, UiDensity, ACCENT_COLORS } from "../../shared/types";
 import {
   SUPPORTED_LANGUAGES,
@@ -20,6 +20,10 @@ interface AppearanceSettingsProps {
   onUiDensityChange: (density: UiDensity) => void;
   devRunLoggingEnabled: boolean;
   onDevRunLoggingEnabledChange: (enabled: boolean) => void;
+  homeResearchVaultEnabled: boolean;
+  homeNextActionsEnabled: boolean;
+  onHomeResearchVaultEnabledChange: (enabled: boolean) => void;
+  onHomeNextActionsEnabledChange: (enabled: boolean) => void;
   onShowOnboarding?: () => void;
   onboardingCompletedAt?: string;
 }
@@ -37,11 +41,14 @@ export function AppearanceSettings({
   onUiDensityChange,
   devRunLoggingEnabled,
   onDevRunLoggingEnabledChange,
+  homeResearchVaultEnabled,
+  homeNextActionsEnabled,
+  onHomeResearchVaultEnabledChange,
+  onHomeNextActionsEnabledChange,
   onShowOnboarding,
   onboardingCompletedAt,
 }: AppearanceSettingsProps) {
-  const { t, i18n } = useTranslation();
-  const currentLanguage = (i18n.language?.split("-")[0] || "en") as SupportedLanguage;
+  const [currentLanguage, setCurrentLanguage] = useState<SupportedLanguage>("en");
   const isModernVisualTheme = visualTheme === "warm" || visualTheme === "oblivion";
   const formatCompletedDate = (isoString?: string) => {
     if (!isoString) return null;
@@ -327,6 +334,29 @@ export function AppearanceSettings({
       </div>
 
       <div className="appearance-section">
+        <h4>Home widgets</h4>
+        <p className="settings-description">
+          Optional workspace widgets shown near the composer. Both are off by default.
+        </p>
+        <label className="settings-checkbox">
+          <input
+            type="checkbox"
+            checked={homeResearchVaultEnabled}
+            onChange={(event) => onHomeResearchVaultEnabledChange(event.target.checked)}
+          />
+          <span>Show research vault</span>
+        </label>
+        <label className="settings-checkbox">
+          <input
+            type="checkbox"
+            checked={homeNextActionsEnabled}
+            onChange={(event) => onHomeNextActionsEnabledChange(event.target.checked)}
+          />
+          <span>Show next actions</span>
+        </label>
+      </div>
+
+      <div className="appearance-section">
         <h4>Transparency effects</h4>
         <p className="settings-description">
           Use translucent macOS materials and blur effects. Turn this off on virtual machines or
@@ -344,14 +374,17 @@ export function AppearanceSettings({
 
       {/* Language */}
       <div className="appearance-section">
-        <h4>{t("settings.language.title")}</h4>
-        <p className="settings-description">{t("settings.language.description")}</p>
+        <h4>Language</h4>
+        <p className="settings-description">Choose the interface language.</p>
         <div className="theme-switcher">
           {SUPPORTED_LANGUAGES.map((lang) => (
             <button
               key={lang}
               className={`theme-option ${currentLanguage === lang ? "selected" : ""}`}
-              onClick={() => changeLanguage(lang)}
+              onClick={() => {
+                setCurrentLanguage(lang);
+                void changeLanguage(lang);
+              }}
             >
               <span className="theme-option-label">{LANGUAGE_NAMES[lang]}</span>
             </button>
