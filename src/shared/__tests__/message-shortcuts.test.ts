@@ -15,6 +15,11 @@ describe("message shortcuts", () => {
     expect(parseLeadingMessageAppShortcut("/multitask 6 audit performance").shortcut?.name).toBe(
       "multitask",
     );
+    expect(parseLeadingMessageAppShortcut("/review all uncommitted fixes")).toMatchObject({
+      matched: true,
+      args: "all uncommitted fixes",
+      shortcut: expect.objectContaining({ name: "review", action: "review" }),
+    });
   });
 
   it("does not match unknown slash commands", () => {
