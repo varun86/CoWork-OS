@@ -2832,3 +2832,152 @@ button {
   background: var(--color-bg-tertiary);
   border-radius: var(--radius-sm);
 }
+
+.collaborative-agents-section .cli-section-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.collab-agents-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  background: var(--color-bg-glass);
+}
+
+.collab-agents-summary-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.collab-agents-summary-head strong {
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+.collab-agents-summary-head span {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.collab-agents-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.collab-agents-stat-grid div {
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.collab-agents-stat-grid span,
+.collab-agent-summary-meta {
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
+.collab-agents-stat-grid strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.collab-agents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.collab-agent-summary-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  border-left: 2px solid var(--color-border);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.collab-agent-summary-row.completed {
+  border-left-color: var(--color-success, #22c55e);
+}
+
+.collab-agent-summary-row.warning {
+  border-left-color: var(--color-warning, #d97706);
+}
+
+.collab-agent-summary-row.failed {
+  border-left-color: var(--color-error, #ef4444);
+}
+
+.collab-agent-summary-row.running {
+  border-left-color: var(--color-accent);
+}
+
+.collab-agent-summary-main,
+.collab-agent-summary-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.collab-agent-summary-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.collab-agent-summary-status {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-muted);
+}
+
+.collab-agent-summary-status.completed {
+  color: var(--color-success, #22c55e);
+}
+
+.collab-agent-summary-status.warning {
+  color: var(--color-warning, #d97706);
+}
+
+.collab-agent-summary-status.failed {
+  color: var(--color-error, #ef4444);
+}
+
+.collab-agent-summary-status.running {
+  color: var(--color-accent);
+}
+
+.collab-agent-open-task {
+  margin-left: auto;
+  padding: 3px 7px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.collab-agent-open-task:hover {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+}
