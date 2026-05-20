@@ -135,4 +135,82 @@ describe("ShellSessionManager", () => {
     expect(next.success).toBe(true);
     expect(next.stdout.trim()).toContain(workspaceDir);
   });
+
+  it("rejects concurrent commands on the same terminal tab", async () => {
+    const { ShellSessionManager } = await import("../tools/shell-session-manager");
+    const manager = ShellSessionManager.getInstance();
+    const tab = await manager.createTab({
+      workspaceId: "workspace-tabs",
+      workspacePath: workspaceDir,
+      title: "Test tab",
+    });
+
+    const first = manager.runInTab({
+      tabId: tab.id,
+      workspacePath: workspaceDir,
+      command: "sleep 1",
+      timeoutMs: 10_000,
+    });
+
+    await expect(
+      manager.runInTab({
+        tabId: tab.id,
+        workspacePath: workspaceDir,
+        command: "pwd",
+        timeoutMs: 10_000,
+      }),
+    ).rejects.toThrow("Terminal session is already running a command.");
+
+    await manager.stopSessionById(tab.id);
+    await first;
+  });
+
+  it("interrupts a running terminal tab on ctrl-c input", async () => {
+    const { ShellSessionManager } = await import("../tools/shell-session-manager");
+    const manager = ShellSessionManager.getInstance();
+    const tab = await manager.createTab({
+      workspaceId: "workspace-tabs",
+      workspacePath: workspaceDir,
+      title: "Test tab",
+    });
+
+    const running = manager.runInTab({
+      tabId: tab.id,
+      workspacePath: workspaceDir,
+      command: "sleep 10",
+      timeoutMs: 20_000,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const interrupted = await manager.writeToSession(tab.id, "\x03");
+    expect(interrupted.status).toBe("inactive");
+    await expect(running).resolves.toMatchObject({
+      success: false,
+      terminationReason: "error",
+    });
+
+    const restarted = await manager.writeToSession(tab.id, "");
+    expect(restarted.status).toBe("active");
+  });
+
+  it("limits retained terminal tabs per workspace", async () => {
+    const { ShellSessionManager } = await import("../tools/shell-session-manager");
+    const manager = ShellSessionManager.getInstance();
+
+    for (let index = 0; index < 12; index += 1) {
+      await manager.createTab({
+        workspaceId: "workspace-tab-limit",
+        workspacePath: workspaceDir,
+        title: `Tab ${index + 1}`,
+      });
+    }
+
+    await expect(
+      manager.createTab({
+        workspaceId: "workspace-tab-limit",
+        workspacePath: workspaceDir,
+        title: "Overflow",
+      }),
+    ).rejects.toThrow("Terminal tabs are limited to 12 per workspace.");
+  });
 });
