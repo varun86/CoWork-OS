@@ -39,6 +39,7 @@ export interface CronRunHistoryEntry {
   status: CronJobStatus;
   error?: string;
   taskId?: string;
+  runMode?: CronJobRunMode;
   workspaceId?: string;
   runWorkspacePath?: string;
   deliveryStatus?: "success" | "failed" | "skipped";
@@ -53,6 +54,16 @@ export interface CronWorkspaceContext {
   workspacePath?: string;
   runWorkspacePath?: string;
   runWorkspaceRelativePath?: string;
+}
+
+export type CronJobRunMode = "new_task" | "thread_follow_up";
+
+export interface CronThreadAutomationConfig {
+  sourceTaskId?: string;
+  sourceTaskTitle?: string;
+  sourceLink?: string;
+  wakeObjective?: string;
+  includeContextBrief?: boolean;
 }
 
 /**
@@ -106,6 +117,14 @@ export interface CronJob {
   workspaceId: string; // Which workspace to run the task in
   taskPrompt: string; // The prompt to send to the agent
   taskTitle?: string; // Optional title for the created task
+  /**
+   * How the scheduler executes this job.
+   * - new_task: create a fresh task for every run (legacy/default behavior)
+   * - thread_follow_up: send the rendered prompt as a follow-up to targetTaskId
+   */
+  runMode?: CronJobRunMode;
+  targetTaskId?: string;
+  threadAutomation?: CronThreadAutomationConfig;
   // Advanced options
   timeoutMs?: number; // Maximum execution time (default: no timeout)
   modelKey?: string; // Specific model to use (e.g., 'sonnet-3-5', 'opus-3')
@@ -221,6 +240,12 @@ export interface CronServiceDeps {
     allowUserInput?: boolean; // Whether task can pause awaiting user input
     agentConfig?: AgentConfig; // Optional agent config override (gateway context, tool restrictions, etc.)
   }) => Promise<{ id: string }>;
+  sendTaskMessage?: (params: {
+    taskId: string;
+    message: string;
+    allowUserInput?: boolean;
+    agentConfig?: AgentConfig;
+  }) => Promise<{ queued: boolean }>;
   // Optional task status hooks (enables waiting for completion + delivering final output)
   getTaskStatus?: (
     taskId: string,
