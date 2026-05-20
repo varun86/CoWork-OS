@@ -15,6 +15,7 @@
   ],
   "tryAsking": [
     "/strategy Create a launch strategy for my new product",
+    "/review all uncommitted fixes",
     "/batch-rename Rename files in Downloads using dates and clear descriptions",
     "/gmail-summary-drive Triage unread email and save a daily summary",
     "/calendar-prep-brief Prepare me for tomorrow's meetings"
@@ -353,7 +354,7 @@
   ],
   "slashCommands": [
     { "name": "strategy", "description": "Build a strategic canvas for a product, business, or project", "skillId": "strategy" },
-    { "name": "review", "description": "Build a custom review checklist", "skillId": "review" },
+    { "name": "review", "description": "Review local changes or a pull request in the current workspace", "skillId": "code-reviewer" },
     { "name": "memory", "description": "Debug likely memory or context issues", "skillId": "memory" },
     { "name": "batch-rename", "description": "Rename files with consistent intelligent names", "skillId": "batch-rename" },
     { "name": "smart-deduplication", "description": "Find duplicate and near-duplicate files safely", "skillId": "smart-deduplication" },
