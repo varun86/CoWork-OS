@@ -8,7 +8,7 @@ vi.mock("better-sqlite3", () => ({
 import { MemoryRepository } from "../repositories";
 
 describe("MemoryRepository.search", () => {
-  it("retries FTS search with a relaxed OR query when the raw query returns no rows", () => {
+  it("skips raw FTS for long natural-language prompts and uses a relaxed OR query", () => {
     const row = {
       id: "mem-1",
       summary: null,
@@ -20,9 +20,10 @@ describe("MemoryRepository.search", () => {
     };
 
     const all = vi.fn((ftsQuery: string) => {
-      // First call: raw natural-language prompt (no OR) -> no results.
-      if (!ftsQuery.includes(" OR ")) return [];
-      // Second call: relaxed query should include OR and key tokens -> return result.
+      // Long natural-language prompts should not run raw FTS on the main process.
+      if (!ftsQuery.includes(" OR ")) {
+        throw new Error("raw FTS query should be skipped for long prompts");
+      }
       if (
         ftsQuery.toLowerCase().includes("pmnl") ||
         ftsQuery.toLowerCase().includes("portuguese")
@@ -45,9 +46,8 @@ describe("MemoryRepository.search", () => {
     const results = repo.search("ws-1", query, 20, true);
 
     expect(results).toHaveLength(1);
-    expect(all).toHaveBeenCalledTimes(2);
-    expect(String(all.mock.calls[0][0])).toContain("PMNL");
-    expect(String(all.mock.calls[1][0])).toContain(" OR ");
+    expect(all).toHaveBeenCalledTimes(1);
+    expect(String(all.mock.calls[0][0])).toContain(" OR ");
   });
 
   it("retries with a relaxed query when the raw FTS query throws due to syntax/punctuation", () => {
