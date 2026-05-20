@@ -1,6 +1,6 @@
 # Everything Workbench
 
-CoWork OS is the GUI-first local AI super app and everything app for everyday work. It is meant to cover more than office-style files: coding, email, research, web design, documents, spreadsheets, decks, PDFs, agent spawning and management, automations, inbox work, channels, devices, skills, and long-running tasks all live in one governed workspace.
+CoWork OS is the GUI-first local AI super app and everything app for everyday work. It is meant to cover more than office-style files: coding, terminal work, email, research, web design, documents, spreadsheets, decks, PDFs, agent spawning and management, automations, inbox work, channels, devices, skills, and long-running tasks all live in one governed workspace.
 
 The Everything Workbench is the proof point for that positioning: ask for an artifact, open it in-place, review or edit it, then ask the agent for follow-up changes without leaving the task. For everyday work, CoWork should be the app you reach for instead of a separate coding app, mail app, browser preview, Word processor, spreadsheet tool, or slide deck editor. External-open actions remain available when a specialized native app is still the better tool for advanced edge cases.
 
@@ -8,7 +8,7 @@ The Everything Workbench is the proof point for that positioning: ask for an art
 
 Use CoWork OS as the app where personal agentic work starts and stays:
 
-- code, review repositories, and run local project tasks
+- code, review repositories, run local project tasks, and keep real terminal tabs beside the agent
 - create reusable agents, spawn parallel work, and monitor agent runs from visual surfaces
 - research, summarize, draft, and maintain knowledge
 - design and revise web pages and frontend experiences
@@ -30,6 +30,7 @@ The workbench model is shared across supported artifact types:
 6. The preview refreshes after the follow-up finishes and the relevant file changes.
 7. Dropdown actions still provide external app, browser, folder, and copy-path options.
 8. Live websites can open in the Browser Workbench so interactive browser-use tasks happen beside the task instead of in a hidden or external browser.
+9. Terminal tabs can open under the composer so direct CLI work happens in the same workspace as the task, artifacts, browser, approvals, and files.
 
 This keeps the agent next to the work product. A spreadsheet can be selected and copied, a DOCX can be edited and saved, a deck can be reviewed slide by slide, a generated page can be opened in a sandboxed preview, and a PDF/LaTeX pair can be inspected from the same task surface.
 
@@ -40,6 +41,7 @@ This keeps the agent next to the work product. A spreadsheet can be selected and
 - **Presentations**: PPTX decks open in a slide viewer with thumbnails, navigation, zoom, speaker notes, text-first loading, cached slide images, and follow-up refresh after requested edits. Legacy PowerPoint formats keep external actions. See [Presentation Artifacts and PPTX Preview](pptx-generation-and-preview.md).
 - **Web pages**: Generated HTML/HTM files and built React output open in a sandboxed iframe preview with browser/folder/copy actions. Fullscreen mode supports follow-up edits and defers refresh until the updated output is ready. See [Web Page Artifacts](web-page-artifacts.md).
 - **Live websites**: Browser-use tasks open a visible in-app Browser Workbench by default. The agent and user share the same right-sidebar/fullscreen Browser V2 webview, with navigation controls, desktop/tablet/mobile viewport testing, snapshot refs, diagnostics, downloads/uploads, screenshots, annotation, and visible cursor movement during actions. See [Browser Workbench](browser-workbench.md) and [Browser V2 Architecture](browser-v2-architecture.md).
+- **Terminal tabs**: Direct CLI work opens in xterm.js + node-pty terminal tabs under the message box, with native macOS shell and Windows `cmd.exe` behavior, keyboard shortcuts, Tab completion, interactive prompts, resizing, and closeable tabs. See [Terminal Tabs](terminal-tabs.md).
 - **PDF and LaTeX**: Source-first LaTeX workflows preserve the editable `.tex` file and pair it with the compiled PDF in one artifact workbench when a local TeX engine is available.
 - **Uploaded PDFs**: PDF attachments are imported into `.cowork/uploads/...`, summarized into a compact attachment block, and read more deeply on demand with `parse_document`. The attachment block preserves the workspace-relative path, page count, extraction status, OCR/scan signals, and a short excerpt without inlining the full PDF into every prompt. Visual/layout PDF questions use `read_pdf_visual` instead.
 - **General previews**: The format-aware file preview popup remains available for files that do not have a dedicated artifact workbench.
@@ -53,6 +55,7 @@ Use CoWork OS as the default app for everyday generated knowledge work:
 - review generated decks and request slide changes through follow-up prompts
 - inspect generated HTML pages and built React output without leaving the task
 - test live websites and local web apps in the in-app browser while watching the agent click, type, scroll, inspect the page, and validate responsive breakpoints
+- run direct terminal sessions without leaving the task workspace
 - keep the task timeline, artifact, and follow-up request in one context
 
 Use external apps only when the work needs advanced native behavior:
@@ -74,3 +77,4 @@ The product promise is "one app for the everyday work most people currently spli
 - [Web Page Artifacts](web-page-artifacts.md)
 - [Browser Workbench](browser-workbench.md)
 - [Browser V2 Architecture](browser-v2-architecture.md)
+- [Terminal Tabs](terminal-tabs.md)
