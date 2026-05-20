@@ -1,5 +1,8 @@
 import type { OAuthAuthInfo, OAuthCredentials, OAuthPrompt } from "@mariozechner/pi-ai";
 import { loadPiAiOAuthModule } from "./pi-ai-loader";
+import { createLogger } from "../../utils/logger";
+
+const logger = createLogger("OpenAI OAuth");
 
 const MANUAL_CALLBACK_HELPER_HTML = `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
 <html lang="en">
@@ -66,7 +69,7 @@ function ensureNodeFetchProxySupport(): void {
       setGlobalDispatcher(new EnvHttpProxyAgent());
     })
     .catch((error) => {
-      console.warn("[OpenAI OAuth] Failed to initialize HTTP proxy support:", error);
+      logger.warn("Failed to initialize HTTP proxy support:", error);
     });
 }
 
@@ -233,13 +236,13 @@ export class OpenAIOAuth {
    * Opens browser for authentication and waits for callback
    */
   async authenticate(): Promise<OpenAIOAuthTokens> {
-    console.log("[OpenAI OAuth] Starting authentication flow with pi-ai SDK...");
+    logger.info("Starting authentication flow with pi-ai SDK...");
     const { loginOpenAICodex } = await loadPiAiOAuthModule();
     const useSystemBrowser = await canBindOpenAICodexCallbackPort();
     let manualRedirectPromise: Promise<string> | null = null;
     if (!useSystemBrowser) {
-      console.warn(
-        "[OpenAI OAuth] localhost:1455 is already in use. Using system browser with manual redirect paste so macOS passkeys still work.",
+      logger.warn(
+        "localhost:1455 is already in use. Using system browser with manual redirect paste so macOS passkeys still work.",
       );
     }
 
@@ -247,7 +250,7 @@ export class OpenAIOAuth {
     try {
       credentials = await loginOpenAICodex({
         onAuth: (info: OAuthAuthInfo) => {
-          console.log("[OpenAI OAuth] Opening browser for authentication...");
+          logger.info("Opening browser for authentication...");
           if (!useSystemBrowser && !manualRedirectPromise) {
             manualRedirectPromise = promptForOpenAICodexRedirectUrl();
           }
@@ -255,13 +258,11 @@ export class OpenAIOAuth {
           if (shell?.openExternal) {
             shell.openExternal(info.url);
           } else {
-            console.log(
-              "[OpenAI OAuth] Browser open is unavailable in this runtime. Open this URL manually:",
-            );
-            console.log(info.url);
+            logger.info("Browser open is unavailable in this runtime. Open this URL manually:");
+            logger.info(info.url);
           }
           if (info.instructions) {
-            console.log("[OpenAI OAuth] Instructions:", info.instructions);
+            logger.info("Instructions:", info.instructions);
           }
         },
         ...(!useSystemBrowser
@@ -273,13 +274,13 @@ export class OpenAIOAuth {
             }
           : {}),
         onPrompt: async (prompt: OAuthPrompt) => {
-          console.log("[OpenAI OAuth] Prompt:", prompt.message);
+          logger.info("Prompt:", prompt.message);
           if (useSystemBrowser) return "";
           manualRedirectPromise ||= promptForOpenAICodexRedirectUrl();
           return manualRedirectPromise;
         },
         onProgress: (message: string) => {
-          console.log("[OpenAI OAuth] Progress:", message);
+          logger.info("Progress:", message);
         },
         originator: "cowork-os",
       });
@@ -287,9 +288,9 @@ export class OpenAIOAuth {
       // The manual helper closes itself when submitted or cancelled.
     }
 
-    console.log("[OpenAI OAuth] Authentication successful!");
+    logger.info("Authentication successful!");
     if (credentials.email) {
-      console.log("[OpenAI OAuth] Logged in as:", credentials.email);
+      logger.info("Logged in as:", credentials.email);
     }
 
     return credentialsToTokens(credentials);
@@ -299,13 +300,13 @@ export class OpenAIOAuth {
    * Refresh an expired access token using pi-ai SDK
    */
   static async refreshTokens(tokens: OpenAIOAuthTokens): Promise<OpenAIOAuthTokens> {
-    console.log("[OpenAI OAuth] Refreshing tokens...");
+    logger.info("Refreshing tokens...");
     const { refreshOpenAICodexToken } = await loadPiAiOAuthModule();
 
     // refreshOpenAICodexToken expects the refresh token string, not the full credentials
     const newCredentials = await refreshOpenAICodexToken(tokens.refresh_token);
 
-    console.log("[OpenAI OAuth] Tokens refreshed successfully!");
+    logger.info("Tokens refreshed successfully!");
     return credentialsToTokens(newCredentials);
   }
 
