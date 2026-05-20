@@ -3,12 +3,20 @@
  */
 
 import { GoogleWorkspaceSettingsData } from "../../shared/types";
+import {
+  getActiveGoogleWorkspaceAccount,
+  getGoogleWorkspaceSettingsForAccount,
+  hasGoogleWorkspaceTokens,
+  upsertGoogleWorkspaceAccount,
+} from "../../shared/google-workspace";
 import { GoogleWorkspaceSettingsManager } from "../settings/google-workspace-manager";
+import { getBundledGoogleWorkspaceOAuthClientId } from "./google-workspace-oauth-client";
 
 const GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const TOKEN_REFRESH_BUFFER_MS = 2 * 60 * 1000;
 const RECONNECT_HINT =
   "Reconnect Google Workspace in Settings > Integrations > Google Workspace.";
+const inFlightRefreshes = new Map<string, Promise<string>>();
 
 function parseJsonSafe(text: string): Any | undefined {
   const trimmed = text.trim();
@@ -28,28 +36,56 @@ function parseScopeList(scope?: string): string[] | undefined {
     .filter(Boolean);
 }
 
+function getRefreshDedupeKey(settings: GoogleWorkspaceSettingsData): string {
+  const activeAccount = getActiveGoogleWorkspaceAccount(settings);
+  const effectiveSettings = getGoogleWorkspaceSettingsForAccount(settings);
+  return [
+    effectiveSettings.clientId || getBundledGoogleWorkspaceOAuthClientId() || "",
+    activeAccount?.email || effectiveSettings.loginHint || settings.loginHint || "default",
+    effectiveSettings.refreshToken || "",
+  ].join("\n");
+}
+
 export async function refreshGoogleWorkspaceAccessToken(
   settings: GoogleWorkspaceSettingsData,
 ): Promise<string> {
-  if (!settings.refreshToken) {
+  const key = getRefreshDedupeKey(settings);
+  const existing = inFlightRefreshes.get(key);
+  if (existing) return existing;
+
+  const refreshPromise = refreshGoogleWorkspaceAccessTokenUncached(settings).finally(() => {
+    inFlightRefreshes.delete(key);
+  });
+  inFlightRefreshes.set(key, refreshPromise);
+  return refreshPromise;
+}
+
+async function refreshGoogleWorkspaceAccessTokenUncached(
+  settings: GoogleWorkspaceSettingsData,
+): Promise<string> {
+  const activeAccount = getActiveGoogleWorkspaceAccount(settings);
+  const effectiveSettings = getGoogleWorkspaceSettingsForAccount(settings);
+
+  if (!effectiveSettings.refreshToken) {
     throw new Error(
       "Google Workspace refresh token not configured. Reconnect in Settings > Integrations > Google Workspace.",
     );
   }
-  if (!settings.clientId) {
+  const clientId = effectiveSettings.clientId || getBundledGoogleWorkspaceOAuthClientId();
+  if (!clientId) {
     throw new Error(
       "Google Workspace client ID not configured. Add it in Settings > Integrations > Google Workspace.",
     );
   }
 
   const params = new URLSearchParams({
-    client_id: settings.clientId,
+    client_id: clientId,
     grant_type: "refresh_token",
-    refresh_token: settings.refreshToken,
+    refresh_token: effectiveSettings.refreshToken,
   });
 
-  if (settings.clientSecret) {
-    params.set("client_secret", settings.clientSecret);
+  if (effectiveSettings.clientSecret) {
+    params.set("client_secret", effectiveSettings.clientSecret);
   }
 
   const response = await fetch(GOOGLE_OAUTH_TOKEN_URL, {
@@ -74,7 +110,15 @@ export async function refreshGoogleWorkspaceAccessToken(
         oauthError === "unauthorized_client");
 
     if (shouldClearBrokenTokens) {
-      const nextSettings: GoogleWorkspaceSettingsData = {
+      const clearedAccount = activeAccount
+        ? upsertGoogleWorkspaceAccount(settings, {
+            ...activeAccount,
+            accessToken: undefined,
+            refreshToken: undefined,
+            tokenExpiresAt: undefined,
+          })
+        : undefined;
+      const nextSettings: GoogleWorkspaceSettingsData = clearedAccount ?? {
         ...settings,
         accessToken: undefined,
         refreshToken: undefined,
@@ -99,10 +143,10 @@ export async function refreshGoogleWorkspaceAccessToken(
   }
 
   const expiresIn = typeof data?.expires_in === "number" ? data.expires_in : undefined;
-  const nextSettings: GoogleWorkspaceSettingsData = {
+  let nextSettings: GoogleWorkspaceSettingsData = {
     ...settings,
     accessToken,
-    tokenExpiresAt: expiresIn ? Date.now() + expiresIn * 1000 : settings.tokenExpiresAt,
+    tokenExpiresAt: expiresIn ? Date.now() + expiresIn * 1000 : effectiveSettings.tokenExpiresAt,
   };
 
   if (data?.refresh_token) {
@@ -114,6 +158,16 @@ export async function refreshGoogleWorkspaceAccessToken(
     nextSettings.scopes = scopes;
   }
 
+  if (activeAccount) {
+    nextSettings = upsertGoogleWorkspaceAccount(settings, {
+      ...activeAccount,
+      accessToken,
+      refreshToken: data?.refresh_token ?? activeAccount.refreshToken,
+      tokenExpiresAt: nextSettings.tokenExpiresAt,
+      scopes: scopes ?? activeAccount.scopes,
+    });
+  }
+
   GoogleWorkspaceSettingsManager.saveSettings(nextSettings);
   GoogleWorkspaceSettingsManager.clearCache();
 
@@ -123,20 +177,24 @@ export async function refreshGoogleWorkspaceAccessToken(
 export async function getGoogleWorkspaceAccessToken(
   settings: GoogleWorkspaceSettingsData,
 ): Promise<string> {
-  if (!settings.accessToken && !settings.refreshToken) {
+  const effectiveSettings = getGoogleWorkspaceSettingsForAccount(settings);
+  if (!hasGoogleWorkspaceTokens(settings)) {
     throw new Error(
       "Google Workspace access token not configured. Connect in Settings > Integrations > Google Workspace.",
     );
   }
 
   const now = Date.now();
-  if (settings.accessToken) {
-    if (!settings.tokenExpiresAt || now < settings.tokenExpiresAt - TOKEN_REFRESH_BUFFER_MS) {
-      return settings.accessToken;
+  if (effectiveSettings.accessToken) {
+    if (
+      !effectiveSettings.tokenExpiresAt ||
+      now < effectiveSettings.tokenExpiresAt - TOKEN_REFRESH_BUFFER_MS
+    ) {
+      return effectiveSettings.accessToken;
     }
   }
 
-  if (settings.refreshToken) {
+  if (effectiveSettings.refreshToken) {
     return refreshGoogleWorkspaceAccessToken(settings);
   }
 
