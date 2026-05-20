@@ -509,7 +509,7 @@ export class FileTools {
   private async realpathIfExists(p: string): Promise<string | null> {
     try {
       return await fs.realpath(p);
-    } catch (error: Any) {
+    } catch (error) {
       if (this.isNotFoundError(error)) return null;
       throw error;
     }
@@ -644,10 +644,10 @@ export class FileTools {
 
     try {
       await this.enforceProjectAccess(fullPath);
-      let stats: Any;
+      let stats: { size: number; isFile?: () => boolean };
       try {
         stats = await fs.stat(fullPath);
-      } catch (error: Any) {
+      } catch (error) {
         if (this.isNotFoundError(error) && !path.isAbsolute(relativePath)) {
           const fallbackPath = await this.resolveCaseInsensitivePath(relativePath);
           if (fallbackPath && fallbackPath !== fullPath) {
@@ -687,8 +687,8 @@ export class FileTools {
       } finally {
         await fileHandle.close();
       }
-    } catch (error: Any) {
-      throw new Error(`Failed to read file: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Failed to read file: ${(error as Error).message}`);
     }
   }
 
@@ -723,7 +723,7 @@ export class FileTools {
       let stats: { size: number };
       try {
         stats = await fs.stat(fullPath);
-      } catch (error: Any) {
+      } catch (error) {
         if (!this.isNotFoundError(error)) {
           throw error;
         }
@@ -840,15 +840,15 @@ export class FileTools {
         window: { start, end, total: stats.size },
         provenance,
       };
-    } catch (error: Any) {
-      throw new Error(`Failed to read file: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Failed to read file: ${(error as Error).message}`);
     }
   }
 
-  private isNotFoundError(error: Any): boolean {
-    const code = error?.code;
+  private isNotFoundError(error: unknown): boolean {
+    const code = (error as { code?: string })?.code;
     if (code === "ENOENT" || code === "ENOTDIR") return true;
-    const message = String(error?.message || "");
+    const message = String((error as Error)?.message || "");
     return /no such file/i.test(message) || /not found/i.test(message);
   }
 
@@ -994,8 +994,8 @@ export class FileTools {
         format: "docx",
         window: sliced.window,
       };
-    } catch (error: Any) {
-      throw new Error(`Failed to read DOCX file: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Failed to read DOCX file: ${(error as Error).message}`);
     }
   }
 
@@ -1058,8 +1058,8 @@ export class FileTools {
           page_count: extractedPdf.pageCount,
         },
       };
-    } catch (error: Any) {
-      throw new Error(`Failed to read PDF file: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Failed to read PDF file: ${(error as Error).message}`);
     }
   }
 
@@ -1102,8 +1102,8 @@ export class FileTools {
         format: "pptx",
         window: sliced.window,
       };
-    } catch (error: Any) {
-      throw new Error(`Failed to read PPTX file: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Failed to read PPTX file: ${(error as Error).message}`);
     }
   }
 
@@ -1178,6 +1178,9 @@ export class FileTools {
     await this.runWriteFilePhase("enforce symlink safe access", requestedPath, options, () =>
       this.enforceSymlinkSafeAccess(fullPath, "write"),
     );
+    await this.runWriteFilePhase("enforce package manifest safety", requestedPath, options, () =>
+      this.enforceRootPackageFileSafety(fullPath, content),
+    );
 
     // Check file size against guardrail limits
     const contentSizeBytes = Buffer.byteLength(content, "utf-8");
@@ -1224,8 +1227,8 @@ export class FileTools {
         success: true,
         path: reportedPath,
       };
-    } catch (error: Any) {
-      throw new Error(`Failed to write file: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Failed to write file: ${(error as Error).message}`);
     }
   }
 
@@ -1305,6 +1308,94 @@ export class FileTools {
     return Math.max(1, toolTimeoutMs - 500);
   }
 
+  private async enforceRootPackageFileSafety(fullPath: string, content: string): Promise<void> {
+    const workspaceRelativePath = getWorkspaceRelativePosixPath(this.workspace.path, fullPath);
+    if (workspaceRelativePath === "package.json") {
+      await this.enforceRootPackageJsonSafety(fullPath, content);
+    } else if (workspaceRelativePath === "package-lock.json") {
+      await this.enforceRootPackageLockSafety(fullPath, content);
+    }
+  }
+
+  private async enforceRootPackageJsonSafety(fullPath: string, content: string): Promise<void> {
+    const existing = await this.readJsonObjectIfPresent(fullPath);
+    if (!existing || !this.hasCriticalPackageScripts(existing)) {
+      return;
+    }
+
+    let next: Any;
+    try {
+      next = JSON.parse(content);
+    } catch {
+      throw new Error(
+        "Refusing to overwrite root package.json with invalid JSON while the existing manifest contains npm scripts.",
+      );
+    }
+
+    const missingFields = [
+      this.isNonEmptyString(next?.name) ? null : "name",
+      this.isPlainObject(next?.scripts) ? null : "scripts",
+      ...(this.isNonEmptyString(existing?.scripts?.dev) && !this.isNonEmptyString(next?.scripts?.dev) ? ["scripts.dev"] : []),
+      ...(this.isNonEmptyString(existing?.scripts?.build) && !this.isNonEmptyString(next?.scripts?.build) ? ["scripts.build"] : []),
+      ...(this.isPlainObject(existing?.dependencies) && !this.isPlainObject(next?.dependencies) ? ["dependencies"] : []),
+      ...(this.isPlainObject(existing?.devDependencies) && !this.isPlainObject(next?.devDependencies) ? ["devDependencies"] : []),
+    ].filter((field): field is string => Boolean(field));
+
+    if (missingFields.length > 0) {
+      throw new Error(
+        `Refusing to overwrite root package.json because the new content would remove required manifest fields: ${missingFields.join(
+          ", ",
+        )}. Use a surgical edit that preserves the existing package metadata and npm scripts.`,
+      );
+    }
+  }
+
+  private async enforceRootPackageLockSafety(fullPath: string, content: string): Promise<void> {
+    const existing = await this.readJsonObjectIfPresent(fullPath);
+    if (!existing || !this.isPlainObject(existing.packages)) {
+      return;
+    }
+
+    let next: Any;
+    try {
+      next = JSON.parse(content);
+    } catch {
+      throw new Error(
+        "Refusing to overwrite root package-lock.json with invalid JSON while the existing lockfile is valid.",
+      );
+    }
+
+    if (!this.isPlainObject(next?.packages) || !this.isPlainObject(next?.packages?.[""])) {
+      throw new Error(
+        "Refusing to overwrite root package-lock.json because the new content is missing the lockfile packages map. Use npm install or a surgical lockfile edit instead.",
+      );
+    }
+  }
+
+  private async readJsonObjectIfPresent(fullPath: string): Promise<Any | null> {
+    let existingContent: string;
+    try {
+      existingContent = await fs.readFile(fullPath, "utf-8");
+    } catch (error) {
+      if ((error as { code?: string })?.code === "ENOENT") return null;
+      return null;
+    }
+    const parsed = JSON.parse(existingContent);
+    return this.isPlainObject(parsed) ? parsed : null;
+  }
+
+  private hasCriticalPackageScripts(value: Any): boolean {
+    return this.isNonEmptyString(value?.scripts?.dev) || this.isNonEmptyString(value?.scripts?.build);
+  }
+
+  private isPlainObject(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  }
+
+  private isNonEmptyString(value: unknown): value is string {
+    return typeof value === "string" && value.trim().length > 0;
+  }
+
   /**
    * List directory contents (limited to prevent context overflow)
    */
@@ -1354,8 +1445,8 @@ export class FileTools {
         totalCount,
         truncated: totalCount > MAX_DIR_ENTRIES,
       };
-    } catch (error: Any) {
-      throw new Error(`Failed to list directory: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Failed to list directory: ${(error as Error).message}`);
     }
   }
 
@@ -1419,8 +1510,8 @@ export class FileTools {
         truncated: totalCount > MAX_DIR_ENTRIES,
         combinedSize,
       };
-    } catch (error: Any) {
-      throw new Error(`Failed to list directory: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Failed to list directory: ${(error as Error).message}`);
     }
   }
 
@@ -1457,8 +1548,8 @@ export class FileTools {
         isFile: stats.isFile(),
         permissions,
       };
-    } catch (error: Any) {
-      throw new Error(`Failed to get file info: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Failed to get file info: ${(error as Error).message}`);
     }
   }
 
@@ -1495,8 +1586,8 @@ export class FileTools {
       });
 
       return { success: true };
-    } catch (error: Any) {
-      throw new Error(`Failed to rename file: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Failed to rename file: ${(error as Error).message}`);
     }
   }
 
@@ -1546,8 +1637,8 @@ export class FileTools {
         success: true,
         path: requestedDestPath,
       };
-    } catch (error: Any) {
-      throw new Error(`Failed to copy file: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Failed to copy file: ${(error as Error).message}`);
     }
   }
 
@@ -1610,14 +1701,15 @@ export class FileTools {
       });
 
       return { success: true };
-    } catch (error: Any) {
+    } catch (error) {
       // If deletion fails, try moving to Trash as fallback
       // This handles EPERM, EACCES, ENOTEMPTY and other filesystem errors
+      const errorCode = (error as { code?: string })?.code;
       if (
-        error.code === "EPERM" ||
-        error.code === "EACCES" ||
-        error.code === "ENOTEMPTY" ||
-        error.code === "EBUSY"
+        errorCode === "EPERM" ||
+        errorCode === "EACCES" ||
+        errorCode === "ENOTEMPTY" ||
+        errorCode === "EBUSY"
       ) {
         try {
           const shell = getElectronShell();
@@ -1632,13 +1724,13 @@ export class FileTools {
           });
 
           return { success: true, movedToTrash: true };
-        } catch (trashError: Any) {
+        } catch (trashError) {
           throw new Error(
-            `Failed to delete file: ${error.code}. Could not move to Trash: ${trashError.message}`,
+            `Failed to delete file: ${errorCode}. Could not move to Trash: ${(trashError as Error).message}`,
           );
         }
       }
-      throw new Error(`Failed to delete file: ${error.message}`);
+      throw new Error(`Failed to delete file: ${(error as Error).message}`);
     }
   }
 
@@ -1671,8 +1763,8 @@ export class FileTools {
       });
 
       return { success: true };
-    } catch (error: Any) {
-      throw new Error(`Failed to create directory: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Failed to create directory: ${(error as Error).message}`);
     }
   }
 
@@ -1774,8 +1866,8 @@ export class FileTools {
         totalFound: matches.length,
         truncated: matches.length >= MAX_SEARCH_RESULTS,
       };
-    } catch (error: Any) {
-      throw new Error(`Search failed: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Search failed: ${(error as Error).message}`);
     }
   }
 
