@@ -5,6 +5,11 @@ import { Workspace } from "../../../shared/types";
 import { AgentDaemon } from "../daemon";
 import { GoogleWorkspaceSettingsManager } from "../../settings/google-workspace-manager";
 import { googleDriveRequest, googleDriveUpload } from "../../utils/google-workspace-api";
+import {
+  hasGoogleWorkspaceScopeCoverage,
+  hasGoogleWorkspaceTokens,
+  inferGoogleWorkspaceConnectionMode,
+} from "../../../shared/google-workspace";
 
 type GoogleDriveAction =
   | "get_current_user"
@@ -42,7 +47,14 @@ export class GoogleDriveTools {
   }
 
   static isEnabled(): boolean {
-    return GoogleWorkspaceSettingsManager.loadSettings().enabled;
+    const settings = GoogleWorkspaceSettingsManager.loadSettings();
+    const mode = inferGoogleWorkspaceConnectionMode(settings.connectionMode, settings.scopes);
+    return (
+      settings.enabled &&
+      mode === "workspace" &&
+      hasGoogleWorkspaceTokens(settings) &&
+      hasGoogleWorkspaceScopeCoverage(settings.scopes, "workspace")
+    );
   }
 
   private async requireApproval(summary: string, details: Record<string, unknown>): Promise<void> {
