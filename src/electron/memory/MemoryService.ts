@@ -166,6 +166,7 @@ export class MemoryService {
   private static sideChannelPolicyPaused = false;
   private static cleanupIntervalHandle?: ReturnType<typeof setInterval>;
   private static db?: import("better-sqlite3").Database;
+  private static ftsWorker: import("../database/FtsWorkerClient").FtsWorkerClient | null = null;
 
   private static promptRecallCache = new Map<
     string,
@@ -194,6 +195,10 @@ export class MemoryService {
     this.cleanupIntervalHandle = setInterval(() => this.runCleanup(), CLEANUP_INTERVAL_MS);
 
     logger.info("[MemoryService] Initialized");
+  }
+
+  static initFtsWorker(worker: import("../database/FtsWorkerClient").FtsWorkerClient): void {
+    this.ftsWorker = worker;
   }
 
   /**
@@ -827,12 +832,7 @@ export class MemoryService {
     limit = 5,
   ): MemorySearchResult[] {
     this.ensureInitialized();
-
-    const queryHash = Array.from(query.slice(0, 2500)).reduce(
-      (h, c) => (Math.imul(31, h) + c.charCodeAt(0)) | 0,
-      0,
-    );
-    const cacheKey = `${workspaceId}:${queryHash}:${query.length}`;
+    const cacheKey = this.getPromptRecallCacheKey(workspaceId, query);
     const cached = this.promptRecallCache.get(cacheKey);
     if (cached && Date.now() - cached.createdAt < MemoryService.PROMPT_RECALL_CACHE_TTL_MS) {
       return cached.results;
@@ -844,28 +844,91 @@ export class MemoryService {
       limit + 5,
     );
 
-    const filtered = rawResults.filter(
-      (r) =>
-        !this.isPromptRecallIgnoredContent(r.content) &&
-        !MemoryObservationService.isPromptSuppressed(r.id),
-    );
-    const results: MemorySearchResult[] = filtered.slice(0, limit).map((r) => ({
-      id: r.id,
-      snippet: r.snippet,
-      type: r.type,
-      relevanceScore: r.relevanceScore,
-      createdAt: r.createdAt,
-      taskId: r.taskId,
-      source: r.source,
-    }));
+    const results = this.filterPromptRecallRows(rawResults, limit);
+    this.rememberPromptRecallResults(cacheKey, results);
 
+    return results;
+  }
+
+  static async searchForPromptRecallAsync(
+    workspaceId: string,
+    query: string,
+    limit = 20,
+  ): Promise<MemorySearchResult[]> {
+    return this.searchForPromptRecallFastAsync(workspaceId, query, limit);
+  }
+
+  static async searchForPromptRecallFastAsync(
+    workspaceId: string,
+    query: string,
+    limit = 5,
+  ): Promise<MemorySearchResult[]> {
+    this.ensureInitialized();
+    const cacheKey = this.getPromptRecallCacheKey(workspaceId, query);
+    const cached = this.promptRecallCache.get(cacheKey);
+    if (cached && Date.now() - cached.createdAt < MemoryService.PROMPT_RECALL_CACHE_TTL_MS) {
+      return cached.results;
+    }
+
+    if (this.ftsWorker) {
+      try {
+        const rawResults = await this.ftsWorker.searchLocalForPromptRecall(
+          workspaceId,
+          query,
+          limit + 5,
+        );
+        const results = this.filterPromptRecallRows(rawResults, limit);
+        if (results.length > 0) {
+          this.rememberPromptRecallResults(cacheKey, results);
+          return results;
+        }
+      } catch {
+        // Fall back to the synchronous path so recall still works if the worker
+        // is unavailable, restarting, or running against an older DB shape.
+      }
+    }
+    return this.searchForPromptRecallFast(workspaceId, query, limit);
+  }
+
+  private static getPromptRecallCacheKey(workspaceId: string, query: string): string {
+    const queryHash = Array.from(query.slice(0, 2500)).reduce(
+      (h, c) => (Math.imul(31, h) + c.charCodeAt(0)) | 0,
+      0,
+    );
+    return `${workspaceId}:${queryHash}:${query.length}`;
+  }
+
+  private static filterPromptRecallRows(
+    rawResults: Array<MemorySearchResult & { content?: string }>,
+    limit: number,
+  ): MemorySearchResult[] {
+    return rawResults
+      .filter(
+        (r) =>
+          !this.isPromptRecallIgnoredContent(r.content || r.snippet || "") &&
+          !MemoryObservationService.isPromptSuppressed(r.id),
+      )
+      .slice(0, limit)
+      .map((r) => ({
+        id: r.id,
+        snippet: r.snippet,
+        type: r.type,
+        relevanceScore: r.relevanceScore,
+        createdAt: r.createdAt,
+        taskId: r.taskId,
+        source: "db" as const,
+      }));
+  }
+
+  private static rememberPromptRecallResults(
+    cacheKey: string,
+    results: MemorySearchResult[],
+  ): void {
     if (this.promptRecallCache.size >= MemoryService.PROMPT_RECALL_CACHE_MAX_ENTRIES) {
       const oldestKey = this.promptRecallCache.keys().next().value;
       if (oldestKey !== undefined) this.promptRecallCache.delete(oldestKey);
     }
     this.promptRecallCache.set(cacheKey, { results, createdAt: Date.now() });
-
-    return results;
   }
 
   static clearPromptRecallCache(): void {
@@ -884,6 +947,100 @@ export class MemoryService {
   ): MemorySearchResult[] {
     this.ensureInitialized();
     return this.memoryRepo.searchByContentMarker(workspaceId, marker, limit);
+  }
+
+  static async searchByContentMarkerAsync(
+    workspaceId: string,
+    marker: string,
+    limit = 50,
+  ): Promise<MemorySearchResult[]> {
+    this.ensureInitialized();
+    if (this.ftsWorker) {
+      try {
+        const results = await this.ftsWorker.searchByContentMarker(workspaceId, marker, limit);
+        if (results.length > 0) return results;
+      } catch {
+        // Fall through to the DB fallback below.
+      }
+    }
+    return this.searchByContentMarker(workspaceId, marker, limit);
+  }
+
+  static async searchAsync(
+    workspaceId: string,
+    query: string,
+    limit = 20,
+  ): Promise<MemorySearchResult[]> {
+    this.ensureInitialized();
+    if (this.ftsWorker) {
+      try {
+        const results = await this.ftsWorker.search(workspaceId, query, limit, true);
+        if (results.length > 0 && this.db) {
+          MemoryTierService.recordReferenceBatch(this.db, results.map((r) => r.id));
+        }
+        if (results.length > 0) return results;
+      } catch {
+        // Fall through to the existing hybrid search path.
+      }
+    }
+    return this.search(workspaceId, query, limit);
+  }
+
+  static async getContextForInjectionAsync(workspaceId: string, taskPrompt: string): Promise<string> {
+    this.ensureInitialized();
+    const featureSettings = MemoryFeaturesManager.loadSettings();
+    if (featureSettings.defaultArchiveInjectionEnabled !== true) {
+      return "";
+    }
+
+    const settings = this.settingsRepo.getOrCreate(workspaceId);
+    if (!settings.enabled) {
+      return "";
+    }
+
+    const recentMemories = this.getRecentForPromptRecall(workspaceId, 5);
+
+    let relevantMemories: MemorySearchResult[] = [];
+    if (taskPrompt && taskPrompt.length > 10) {
+      try {
+        const query = taskPrompt.slice(0, 2500);
+        relevantMemories = await this.searchForPromptRecallFastAsync(workspaceId, query, 10);
+
+        const recentIds = new Set(recentMemories.map((m) => m.id));
+        relevantMemories = relevantMemories.filter((m) => !recentIds.has(m.id)).slice(0, 7);
+      } catch {
+        // Search failed, continue without relevant memories
+      }
+    }
+
+    if (recentMemories.length === 0 && relevantMemories.length === 0) {
+      return "";
+    }
+
+    const parts: string[] = ["<memory_context>"];
+    parts.push("The following memories from previous sessions may be relevant:");
+
+    if (recentMemories.length > 0) {
+      parts.push("\n## Recent Activity");
+      recentMemories.forEach((memory) => {
+        const rawText = memory.summary || this.truncate(memory.content, 150);
+        const text = InputSanitizer.sanitizeMemoryContent(rawText);
+        const date = new Date(memory.createdAt).toLocaleDateString();
+        parts.push(`- [${memory.type}] (${date}) ${text}`);
+      });
+    }
+
+    if (relevantMemories.length > 0) {
+      parts.push("\n## Relevant to Current Task (Hybrid Recall)");
+      relevantMemories.forEach((result) => {
+        const date = new Date(result.createdAt).toLocaleDateString();
+        const sanitizedSnippet = InputSanitizer.sanitizeMemoryContent(result.snippet);
+        parts.push(`- [${result.type}] (${date}) ${sanitizedSnippet}`);
+      });
+    }
+
+    parts.push("</memory_context>");
+    return parts.join("\n");
   }
 
   private static isImportedMemoryContent(content: string): boolean {
