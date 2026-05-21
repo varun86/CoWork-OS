@@ -18,6 +18,9 @@
 
 import Database from "better-sqlite3";
 import type { MemoryTier } from "../../shared/types";
+import { createLogger } from "../utils/logger";
+
+const logger = createLogger("MemoryTierService");
 
 export interface TierPromotionRule {
   fromTier: MemoryTier;
@@ -55,7 +58,25 @@ export class MemoryTierService {
       ).run(Date.now(), memoryId);
     } catch (err) {
       // Non-fatal: column may not exist in very old schemas
-      console.warn("[MemoryTierService] recordReference failed:", err);
+      logger.warn("[MemoryTierService] recordReference failed:", err);
+    }
+  }
+
+  /**
+   * Batch variant — single UPDATE instead of N round-trips.
+   */
+  static recordReferenceBatch(db: Database.Database, memoryIds: string[]): void {
+    if (memoryIds.length === 0) return;
+    try {
+      const placeholders = memoryIds.map(() => "?").join(", ");
+      db.prepare(
+        `UPDATE memories
+         SET reference_count = COALESCE(reference_count, 0) + 1,
+             last_referenced_at = ?
+         WHERE id IN (${placeholders})`,
+      ).run(Date.now(), ...memoryIds);
+    } catch (err) {
+      logger.warn("[MemoryTierService] recordReferenceBatch failed:", err);
     }
   }
 
@@ -112,11 +133,11 @@ export class MemoryTierService {
         .run(cutoff, SHORT_TIER_EVICTION_THRESHOLD);
       evicted += evictResult.changes;
     } catch (err) {
-      console.warn("[MemoryTierService] Promotion pass failed:", err);
+      logger.warn("[MemoryTierService] Promotion pass failed:", err);
     }
 
     if (promoted > 0 || evicted > 0) {
-      console.log(
+      logger.info(
         `[MemoryTierService] Promotion pass: promoted=${promoted}, evicted=${evicted}`,
       );
     }
