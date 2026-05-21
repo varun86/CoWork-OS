@@ -20,11 +20,16 @@ import {
   getProjectIdFromWorkspaceRelPath,
   getWorkspaceRelativePosixPath,
 } from "../../security/project-access";
+import {
+  getDesktopLocationService,
+  type DesktopLocationSnapshot,
+} from "../../location/DesktopLocationService";
 
 const execFileAsync = promisify(execFile);
 
 const DEFAULT_TIMEOUT = 30 * 1000; // 30 seconds
 const APPLESCRIPT_TIMEOUT_MS = 240 * 1000; // 4 minutes
+const CURRENT_LOCATION_FAILURE_TTL_MS = 2 * 60 * 1000;
 
 function sessionRecallEnabled(): boolean {
   return MemoryFeaturesManager.loadSettings().sessionRecallEnabled !== false;
@@ -44,6 +49,37 @@ function progressiveRecallEnabled(): boolean {
 
 function durableContextEnabled(): boolean {
   return DurableContextService.isEnabled();
+}
+
+function getCurrentLocationFailureMessage(error: unknown): string {
+  const rawMessage = error instanceof Error ? error.message : String(error || "");
+  if (/timed out while getting current location/i.test(rawMessage)) {
+    return [
+      "Native desktop geolocation timed out.",
+      "Do not retry get_current_location in this task; ask the user for a typed address, venue, or nearby landmark.",
+      "Check operating system Location Services permissions for CoWork OS.",
+    ].join(" ");
+  }
+  if (/desktop geolocation is not configured|macos core location helper is not built|location_not_configured/i.test(rawMessage)) {
+    return [
+      "Native desktop geolocation is not configured.",
+      "Do not retry get_current_location in this task; ask the user for a typed address, venue, or nearby landmark.",
+      "Build and bundle the native OS location helper for this platform.",
+    ].join(" ");
+  }
+  if (/location access was denied|location_denied/i.test(rawMessage)) {
+    return [
+      "Desktop location access was denied.",
+      "Do not retry get_current_location in this task; ask the user for a typed address, venue, or nearby landmark.",
+    ].join(" ");
+  }
+  if (/current location is unavailable|geolocation is not available|location_unavailable|not implemented yet|not supported/i.test(rawMessage)) {
+    return [
+      "Native desktop geolocation is unavailable.",
+      "Do not retry get_current_location in this task; ask the user for a typed address, venue, or nearby landmark.",
+    ].join(" ");
+  }
+  return rawMessage || "Unable to determine current location.";
 }
 
 const PROTECTED_SYSTEM_PATHS = [
@@ -245,6 +281,13 @@ function getElectronApis(): { clipboard?: Any; desktopCapturer?: Any; shell?: An
  * These tools enable more autonomous operation for general task completion
  */
 export class SystemTools {
+  private currentLocationFailure:
+    | {
+        at: number;
+        message: string;
+      }
+    | null = null;
+
   constructor(
     private workspace: Workspace,
     private daemon: AgentDaemon,
@@ -278,7 +321,7 @@ export class SystemTools {
       ? path.resolve(inputPath)
       : path.resolve(workspaceRoot, inputPath);
 
-    let resolvedPath = candidatePath;
+    let resolvedPath: string;
     try {
       resolvedPath = fsSync.realpathSync(candidatePath);
     } catch {
@@ -369,6 +412,64 @@ export class SystemTools {
     });
 
     return result;
+  }
+
+  async getCurrentLocation(options?: {
+    accuracy?: "coarse" | "precise";
+    maxAgeMs?: number;
+  }): Promise<{
+    latitude: number;
+    longitude: number;
+    accuracyMeters: number;
+    timestamp: string;
+    source: DesktopLocationSnapshot["source"];
+    mapsUrl: string;
+  }> {
+    this.daemon.logEvent(this.taskId, "tool_call", {
+      tool: "get_current_location",
+      accuracy: options?.accuracy || "precise",
+    });
+
+    if (
+      this.currentLocationFailure &&
+      Date.now() - this.currentLocationFailure.at < CURRENT_LOCATION_FAILURE_TTL_MS
+    ) {
+      throw new Error(this.currentLocationFailure.message);
+    }
+
+    let location: DesktopLocationSnapshot;
+    try {
+      location = await getDesktopLocationService().getCurrentLocation({
+        accuracy: options?.accuracy,
+        maxAgeMs: options?.maxAgeMs,
+      });
+      this.currentLocationFailure = null;
+    } catch (error) {
+      const message = getCurrentLocationFailureMessage(error);
+      this.currentLocationFailure = { at: Date.now(), message };
+      this.daemon.logEvent(this.taskId, "tool_result", {
+        tool: "get_current_location",
+        success: false,
+        error: message,
+      });
+      throw new Error(message);
+    }
+
+    this.daemon.logEvent(this.taskId, "tool_result", {
+      tool: "get_current_location",
+      success: true,
+      source: location.source,
+      accuracyMeters: Math.round(location.accuracyMeters),
+    });
+
+    return {
+      latitude: location.latitude,
+      longitude: location.longitude,
+      accuracyMeters: location.accuracyMeters,
+      timestamp: new Date(location.timestamp).toISOString(),
+      source: location.source,
+      mapsUrl: `https://www.google.com/maps?q=${location.latitude},${location.longitude}`,
+    };
   }
 
   /**
@@ -1717,6 +1818,27 @@ export class SystemTools {
         input_schema: {
           type: "object",
           properties: {},
+          required: [],
+        },
+      },
+      {
+        name: "get_current_location",
+        description:
+          "Get the user's current desktop location after explicit one-time location permission. " +
+          "Use this for nearby, walking-distance, or local errand questions.",
+        input_schema: {
+          type: "object",
+          properties: {
+            accuracy: {
+              type: "string",
+              enum: ["coarse", "precise"],
+              description: 'Desired accuracy. Defaults to "precise".',
+            },
+            maxAgeMs: {
+              type: "number",
+              description: "Maximum age in milliseconds for a cached native OS location, when supported.",
+            },
+          },
           required: [],
         },
       },
