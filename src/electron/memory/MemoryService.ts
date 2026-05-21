@@ -132,6 +132,16 @@ interface CompressionDiagnostics {
   originCounts: Record<string, number>;
 }
 
+export interface PromptRecallDiagnostics {
+  queries: number;
+  workerUnavailable: number;
+  workerFailures: number;
+  workerEmptyResults: number;
+  workerHits: number;
+  lastFailureAt: number | null;
+  lastFailureMessage: string | null;
+}
+
 export class MemoryService {
   private static memoryRepo: MemoryRepository;
   private static embeddingRepo: MemoryEmbeddingRepository;
@@ -174,6 +184,15 @@ export class MemoryService {
   >();
   private static readonly PROMPT_RECALL_CACHE_TTL_MS = 5 * 60 * 1000;
   private static readonly PROMPT_RECALL_CACHE_MAX_ENTRIES = 32;
+  private static promptRecallDiagnostics: PromptRecallDiagnostics = {
+    queries: 0,
+    workerUnavailable: 0,
+    workerFailures: 0,
+    workerEmptyResults: 0,
+    workerHits: 0,
+    lastFailureAt: null,
+    lastFailureMessage: null,
+  };
 
   /**
    * Initialize the memory service
@@ -870,24 +889,38 @@ export class MemoryService {
       return cached.results;
     }
 
-    if (this.ftsWorker) {
-      try {
-        const rawResults = await this.ftsWorker.searchLocalForPromptRecall(
-          workspaceId,
-          query,
-          limit + 5,
-        );
-        const results = this.filterPromptRecallRows(rawResults, limit);
-        if (results.length > 0) {
-          this.rememberPromptRecallResults(cacheKey, results);
-          return results;
-        }
-      } catch {
-        // Fall back to the synchronous path so recall still works if the worker
-        // is unavailable, restarting, or running against an older DB shape.
-      }
+    this.promptRecallDiagnostics.queries += 1;
+    if (!this.ftsWorker) {
+      this.recordPromptRecallDiagnostic("workerUnavailable");
+      logger.warn("[MemoryService] Prompt recall FTS worker unavailable; skipping sync fallback");
+      return [];
     }
-    return this.searchForPromptRecallFast(workspaceId, query, limit);
+
+    try {
+      const rawResults = await this.ftsWorker.searchLocalForPromptRecall(
+        workspaceId,
+        query,
+        limit + 5,
+      );
+      const results = this.filterPromptRecallRows(rawResults, limit);
+      if (results.length > 0) {
+        this.recordPromptRecallDiagnostic("workerHits");
+        this.rememberPromptRecallResults(cacheKey, results);
+      } else {
+        this.recordPromptRecallDiagnostic("workerEmptyResults");
+      }
+      return results;
+    } catch (error) {
+      this.recordPromptRecallDiagnostic(
+        "workerFailures",
+        error instanceof Error ? error.message : String(error),
+      );
+      logger.warn(
+        "[MemoryService] Prompt recall FTS worker failed; skipping sync fallback:",
+        error,
+      );
+      return [];
+    }
   }
 
   private static getPromptRecallCacheKey(workspaceId: string, query: string): string {
@@ -933,6 +966,21 @@ export class MemoryService {
 
   static clearPromptRecallCache(): void {
     this.promptRecallCache.clear();
+  }
+
+  static getPromptRecallDiagnostics(): PromptRecallDiagnostics {
+    return { ...this.promptRecallDiagnostics };
+  }
+
+  private static recordPromptRecallDiagnostic(
+    field: "workerUnavailable" | "workerFailures" | "workerEmptyResults" | "workerHits",
+    failureMessage?: string,
+  ): void {
+    this.promptRecallDiagnostics[field] += 1;
+    if (failureMessage) {
+      this.promptRecallDiagnostics.lastFailureAt = Date.now();
+      this.promptRecallDiagnostics.lastFailureMessage = failureMessage;
+    }
   }
 
   /**
