@@ -70,6 +70,7 @@ import {
 import { TASK_EVENT_STATUS_MAP } from "../shared/task-event-status-map";
 import { getEffectiveTaskEventType } from "./utils/task-event-compat";
 import { isLlmRequestCancelledEvent } from "./utils/task-event-visibility";
+import { appendRendererTaskEvents, capTaskEvents } from "./utils/task-event-append";
 import { invalidateGlobalMeasurer } from "./utils/pretext-adapter";
 import {
   hasTaskOutputs,
@@ -1516,20 +1517,10 @@ const SelectedTaskWorkspaceView = memo(function SelectedTaskWorkspaceView({
   prev.rightPanelInput === next.rightPanelInput
 );
 
-const MAX_RENDERER_TASK_EVENTS = 600;
 const MAX_RENDERER_CHILD_EVENTS = 300;
 const APPROVAL_TOAST_PREFIX = "approval-request-";
-const RENDERER_NOISE_EVENT_TYPES = new Set([
-  "log",
-  "llm_usage",
-  "llm_streaming",
-  "progress_update",
-  "task_analysis",
-  "executing",
-]);
 const RENDERER_DROPPED_EVENT_TYPES = new Set(["log", "task_analysis"]);
 const RENDERER_THROTTLED_EVENT_TYPES = new Set(["llm_streaming"]);
-const RENDERER_REPLACEABLE_EVENT_TYPES = new Set(["progress_update", "executing", "llm_streaming"]);
 const RENDERER_NOISE_THROTTLE_MS = 120;
 /** Tool-heavy events batched to avoid UI freeze/re-render storms (OpenClaw-style fix) */
 const EVENT_TYPES_BATCHABLE = new Set([
@@ -1560,17 +1551,13 @@ const EVENT_BATCH_FLUSH_INTERVAL_MS = 100;
 const EVENT_BATCH_BURST_WINDOW_MS = 160;
 const EVENT_BATCH_MAX_WAIT_MS = 250;
 const EVENT_BATCH_MAX_EVENTS = 32;
-const STALE_TASK_RECONCILE_INTERVAL_MS = 4_000;
+const STALE_TASK_RECONCILE_INTERVAL_MS = 15_000;
 const STALE_TASK_RECONCILE_IDLE_WINDOW_MS = 12_000;
 
 type PendingToolEventEntry = {
   event: TaskEvent;
   queuedAtMs: number;
 };
-
-function isRendererNoiseEvent(event: TaskEvent): boolean {
-  return RENDERER_NOISE_EVENT_TYPES.has(getEffectiveTaskEventType(event));
-}
 
 function isTaskPossiblyRunning(status: Task["status"] | undefined): boolean {
   return status === "planning" || status === "executing" || status === "interrupted";
@@ -1588,87 +1575,6 @@ function getLatestEventTimestamp(events: TaskEvent[]): number {
     }
   }
   return latest;
-}
-
-function capTaskEvents(events: TaskEvent[], maxEvents: number = MAX_RENDERER_TASK_EVENTS): TaskEvent[] {
-  if (events.length <= maxEvents) return events;
-
-  const indexed = events.map((event, index) => ({ event, index }));
-  const structural = indexed.filter(({ event }) => !isRendererNoiseEvent(event));
-
-  if (structural.length >= maxEvents) {
-    return structural.slice(-maxEvents).map(({ event }) => event);
-  }
-
-  const noiseBudget = maxEvents - structural.length;
-  const recentNoise = indexed
-    .filter(({ event }) => isRendererNoiseEvent(event))
-    .slice(-noiseBudget);
-  const keepIndexes = new Set<number>([
-    ...structural.map(({ index }) => index),
-    ...recentNoise.map(({ index }) => index),
-  ]);
-
-  return indexed.filter(({ index }) => keepIndexes.has(index)).map(({ event }) => event);
-}
-
-function getTransientEventReplacementKey(event: TaskEvent): string | null {
-  if (!RENDERER_REPLACEABLE_EVENT_TYPES.has(event.type)) return null;
-  const payload =
-    event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
-      ? (event.payload as Record<string, unknown>)
-      : {};
-  const payloadStep =
-    payload.step && typeof payload.step === "object" && !Array.isArray(payload.step)
-      ? (payload.step as Record<string, unknown>)
-      : null;
-  const stepId =
-    typeof event.stepId === "string"
-      ? event.stepId
-      : typeof payload.stepId === "string"
-        ? payload.stepId
-        : typeof payloadStep?.id === "string"
-          ? payloadStep.id
-          : "";
-  const groupId =
-    typeof event.groupId === "string"
-      ? event.groupId
-      : typeof payload.groupId === "string"
-        ? payload.groupId
-        : "";
-  const stage =
-    typeof payload.stage === "string"
-      ? payload.stage
-      : typeof payload.label === "string"
-        ? payload.label
-        : "";
-  return [event.taskId, event.type, stepId, groupId, stage].join(":");
-}
-
-function appendRendererTaskEvents(
-  previousEvents: TaskEvent[],
-  incomingEvents: TaskEvent[],
-): TaskEvent[] {
-  if (incomingEvents.length === 0) return previousEvents;
-  let nextEvents = previousEvents;
-  for (const incomingEvent of incomingEvents) {
-    const replacementKey = getTransientEventReplacementKey(incomingEvent);
-    if (replacementKey) {
-      let replaced = false;
-      for (let i = nextEvents.length - 1; i >= 0; i -= 1) {
-        if (getTransientEventReplacementKey(nextEvents[i]) === replacementKey) {
-          const updated = [...nextEvents];
-          updated[i] = incomingEvent;
-          nextEvents = updated;
-          replaced = true;
-          break;
-        }
-      }
-      if (replaced) continue;
-    }
-    nextEvents = capTaskEvents([...nextEvents, incomingEvent]);
-  }
-  return nextEvents;
 }
 
 function isImmediateTaskAttentionEvent(event: TaskEvent): boolean {
@@ -3564,7 +3470,7 @@ export function App() {
           return;
         }
         loadChildHistoricalEvents();
-      }, 5_000);
+      }, 15_000);
     }
 
     return () => {
@@ -4474,6 +4380,13 @@ export function App() {
     },
     [clearRemoteTaskView],
   );
+  const handleOpenSettings = useCallback(() => setCurrentView("settings"), []);
+  const handleOpenMissionControl = useCallback(() => {
+    setMissionControlInitialCompanyId(null);
+    setMissionControlInitialIssueId(null);
+    setMissionControlEverydayAgentFocus(false);
+    setCurrentView("missionControl");
+  }, []);
   const handleSelectChildTaskFromMainContent = useCallback((taskId: string) => {
     const task = tasksRef.current.find((candidate) => candidate.id === taskId);
     if (task && isSynthesisChildTask(task)) return;
@@ -4938,13 +4851,8 @@ export function App() {
                 onOpenHealth={() => setCurrentView("health")}
                 onOpenDevices={() => setCurrentView("devices")}
                 onNewSession={handleNewSession}
-                onOpenSettings={() => setCurrentView("settings")}
-                onOpenMissionControl={() => {
-                  setMissionControlInitialCompanyId(null);
-                  setMissionControlInitialIssueId(null);
-                  setMissionControlEverydayAgentFocus(false);
-                  setCurrentView("missionControl");
-                }}
+                onOpenSettings={handleOpenSettings}
+                onOpenMissionControl={handleOpenMissionControl}
                 onTasksChanged={loadTasks}
                 onLoadMoreTasks={loadMoreTasks}
                 hasMoreTasks={hasMoreTasks}
