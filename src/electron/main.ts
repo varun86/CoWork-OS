@@ -218,6 +218,10 @@ import {
   initializeXMentionBridgeService,
   XMentionBridgeService,
 } from "./x-mentions";
+import {
+  getDesktopLocationService,
+  registerLocationProbeScheme,
+} from "./location/DesktopLocationService";
 import { AmbientMonitoringService } from "./monitoring/AmbientMonitoringService";
 import { AwarenessService } from "./awareness/AwarenessService";
 import { AutonomyEngine } from "./awareness/AutonomyEngine";
@@ -1058,6 +1062,7 @@ app.commandLine.appendSwitch("ignore-gpu-blocklist");
 // Register canvas:// protocol scheme (must be called before app.ready)
 registerCanvasScheme();
 registerMediaScheme();
+registerLocationProbeScheme();
 registerTaskDeeplinkProtocol();
 
 applyApplicationIdentity();
@@ -1319,6 +1324,7 @@ if (!gotTheLock) {
   }
 
   app.whenReady().then(async () => {
+    getDesktopLocationService().installPermissionHandlers();
     const startupStartedAt = Date.now();
     const logPhase = (name: string, phaseStartedAt: number): void => {
       logger.debug(
