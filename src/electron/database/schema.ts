@@ -42,6 +42,173 @@ export class DatabaseManager {
     return DatabaseManager.instance;
   }
 
+  private static parseJsonObject(value: unknown): Record<string, unknown> {
+    if (typeof value !== "string" || value.trim().length === 0) return {};
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private static resolveTaskEventType(row: {
+    type?: unknown;
+    legacy_type?: unknown;
+    payload?: unknown;
+  }): string {
+    if (typeof row.legacy_type === "string" && row.legacy_type.trim().length > 0) {
+      return row.legacy_type.trim();
+    }
+    const payload = DatabaseManager.parseJsonObject(row.payload);
+    if (typeof payload.legacyType === "string" && payload.legacyType.trim().length > 0) {
+      return payload.legacyType.trim();
+    }
+    return typeof row.type === "string" ? row.type : "";
+  }
+
+  private static isRunTerminalEvent(row: {
+    type?: unknown;
+    legacy_type?: unknown;
+    payload?: unknown;
+  }): boolean {
+    const type = DatabaseManager.resolveTaskEventType(row);
+    if (type === "task_completed" || type === "task_cancelled") return true;
+    if (type !== "task_status") return false;
+    const payload = DatabaseManager.parseJsonObject(row.payload);
+    const status = payload.status;
+    return status === "completed" || status === "failed" || status === "cancelled";
+  }
+
+  private static isRunActivityEvent(row: {
+    type?: unknown;
+    legacy_type?: unknown;
+    payload?: unknown;
+  }): boolean {
+    const type = DatabaseManager.resolveTaskEventType(row);
+    return !(
+      type === "user_message" ||
+      type === "assistant_message" ||
+      type === "task_created" ||
+      type === "task_completed" ||
+      type === "task_cancelled" ||
+      type === "task_status"
+    );
+  }
+
+  private static calculateLastRunDurationMs(params: {
+    createdAt: number;
+    completedAt: number;
+    events: Array<{ timestamp?: unknown; type?: unknown; legacy_type?: unknown; payload?: unknown }>;
+  }): number {
+    const end = Number.isFinite(params.completedAt)
+      ? Math.floor(params.completedAt)
+      : Date.now();
+
+    let previousTerminalAt: number | undefined;
+    for (const event of params.events) {
+      const ts =
+        typeof event.timestamp === "number" && Number.isFinite(event.timestamp)
+          ? event.timestamp
+          : undefined;
+      if (ts === undefined || ts >= end) continue;
+      if (!DatabaseManager.isRunTerminalEvent(event)) continue;
+      previousTerminalAt = Math.max(previousTerminalAt ?? 0, ts);
+    }
+
+    let latestUserMessageAt: number | undefined;
+    for (const event of params.events) {
+      const ts =
+        typeof event.timestamp === "number" && Number.isFinite(event.timestamp)
+          ? event.timestamp
+          : undefined;
+      if (ts === undefined || ts > end) continue;
+      if (previousTerminalAt !== undefined && ts <= previousTerminalAt) continue;
+      if (DatabaseManager.resolveTaskEventType(event) !== "user_message") continue;
+      latestUserMessageAt = Math.max(latestUserMessageAt ?? 0, ts);
+    }
+
+    const fallbackStart = Number.isFinite(params.createdAt) ? Math.floor(params.createdAt) : end;
+    let durationMs = Math.max(0, end - (latestUserMessageAt ?? fallbackStart));
+
+    if (durationMs < 1000) {
+      let firstActivityAt: number | undefined;
+      let lastActivityAt: number | undefined;
+      for (const event of params.events) {
+        const ts =
+          typeof event.timestamp === "number" && Number.isFinite(event.timestamp)
+            ? event.timestamp
+            : undefined;
+        if (ts === undefined || ts > end) continue;
+        if (previousTerminalAt !== undefined && ts <= previousTerminalAt) continue;
+        if (!DatabaseManager.isRunActivityEvent(event)) continue;
+        firstActivityAt = Math.min(firstActivityAt ?? ts, ts);
+        lastActivityAt = Math.max(lastActivityAt ?? ts, ts);
+      }
+      if (firstActivityAt !== undefined && lastActivityAt !== undefined) {
+        durationMs = Math.max(durationMs, lastActivityAt - firstActivityAt);
+      }
+    }
+
+    return Math.max(0, Math.floor(durationMs));
+  }
+
+  private backfillTaskLastRunDurations(): void {
+    const taskRows = this.db
+      .prepare(
+        `
+          SELECT id, created_at, updated_at, completed_at
+          FROM tasks
+          WHERE last_run_duration_ms IS NULL
+            AND completed_at IS NOT NULL
+        `,
+      )
+      .all() as Array<{
+      id: string;
+      created_at: number;
+      updated_at: number;
+      completed_at: number;
+    }>;
+    if (taskRows.length === 0) return;
+
+    const eventsStmt = this.db.prepare(`
+      SELECT timestamp, type, legacy_type, payload
+      FROM task_events
+      WHERE task_id = ?
+      ORDER BY COALESCE(seq, timestamp) ASC, timestamp ASC
+    `);
+    const updateStmt = this.db.prepare(`
+      UPDATE tasks
+      SET last_run_duration_ms = ?
+      WHERE id = ? AND last_run_duration_ms IS NULL
+    `);
+    const runBackfill = this.db.transaction(() => {
+      for (const row of taskRows) {
+        const completedAt =
+          typeof row.completed_at === "number" && Number.isFinite(row.completed_at)
+            ? row.completed_at
+            : typeof row.updated_at === "number" && Number.isFinite(row.updated_at)
+              ? row.updated_at
+              : row.created_at;
+        const events = eventsStmt.all(row.id) as Array<{
+          timestamp?: unknown;
+          type?: unknown;
+          legacy_type?: unknown;
+          payload?: unknown;
+        }>;
+        const durationMs = DatabaseManager.calculateLastRunDurationMs({
+          createdAt: row.created_at,
+          completedAt,
+          events,
+        });
+        updateStmt.run(durationMs, row.id);
+      }
+    });
+    runBackfill();
+  }
+
   // Migration version - increment this to force re-migration for users with partial migrations
   private static readonly MIGRATION_VERSION = 2;
 
@@ -317,6 +484,7 @@ export class DatabaseManager {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         completed_at INTEGER,
+        last_run_duration_ms INTEGER,
         budget_tokens INTEGER,
         budget_cost REAL,
         error TEXT,
@@ -2063,6 +2231,7 @@ export class DatabaseManager {
       "ALTER TABLE tasks ADD COLUMN budget_profile TEXT",
       "ALTER TABLE tasks ADD COLUMN terminal_status TEXT",
       "ALTER TABLE tasks ADD COLUMN failure_class TEXT",
+      "ALTER TABLE tasks ADD COLUMN last_run_duration_ms INTEGER",
       "ALTER TABLE tasks ADD COLUMN best_known_outcome TEXT",
       "ALTER TABLE tasks ADD COLUMN budget_usage TEXT",
       "ALTER TABLE tasks ADD COLUMN continuation_count INTEGER DEFAULT 0",
@@ -2109,6 +2278,12 @@ export class DatabaseManager {
       } catch {
         // Column already exists, ignore
       }
+    }
+
+    try {
+      this.backfillTaskLastRunDurations();
+    } catch (err) {
+      schemaLogger.warn("backfillTaskLastRunDurations failed:", err);
     }
 
     try {
@@ -4926,6 +5101,15 @@ export class DatabaseManager {
       this.db.exec(`
         CREATE INDEX IF NOT EXISTS idx_memories_tier
           ON memories(workspace_id, tier, reference_count DESC);
+      `);
+    } catch {
+      // Index already exists
+    }
+
+    try {
+      this.db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_memories_workspace_recent
+          ON memories(workspace_id, created_at DESC);
       `);
     } catch {
       // Index already exists
