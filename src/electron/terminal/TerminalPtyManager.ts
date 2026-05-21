@@ -242,7 +242,7 @@ export class TerminalPtyManager {
     if (input) {
       runtime.process?.write(input);
       this.updateInfo(runtime, {
-        status: "active",
+        status: runtime.info.status === "running" ? "running" : "active",
         commandCount: runtime.info.commandCount + (input.includes("\r") || input.includes("\n") ? 1 : 0),
       });
     }
@@ -288,7 +288,7 @@ export class TerminalPtyManager {
     this.updateInfo(runtime, {
       lastCommand: command,
       lastCommandAt: Date.now(),
-      status: "active",
+      status: "running",
     });
     return { ...runtime.info };
   }
@@ -350,7 +350,7 @@ export class TerminalPtyManager {
       lastMatchEnd = (match.index || 0) + match[0].length;
       const cwd = resolveOsc7Cwd(match[1] || "");
       if (cwd) {
-        this.updateInfo(runtime, { cwd });
+        this.updateInfo(runtime, { cwd, status: "active" });
       }
     }
     runtime.cwdParseBuffer = text.slice(Math.max(lastMatchEnd, text.length - 512));
