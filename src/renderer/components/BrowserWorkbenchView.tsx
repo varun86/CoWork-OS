@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ClipboardList,
   Download,
+  ExternalLink,
   FileSpreadsheet,
   FormInput,
   Maximize2,
@@ -109,6 +110,20 @@ function getDomain(url: string): string {
     return parsed.hostname || url;
   } catch {
     return url || "Browser";
+  }
+}
+
+function getExternalBrowserUrl(rawUrl: string): string | null {
+  const value = rawUrl.trim();
+  if (!value) return null;
+  if (/^[a-z][a-z0-9+\-.]*:/i.test(value) && !/^https?:\/\//i.test(value)) return null;
+  const normalized = normalizeUrl(value);
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return parsed.toString();
+  } catch {
+    return null;
   }
 }
 
@@ -574,6 +589,28 @@ export function BrowserWorkbenchView({
     }
   }, []);
 
+  const openCurrentPageExternal = useCallback(async () => {
+    const webview = webviewRef.current;
+    const currentUrl =
+      typeof webview?.getURL === "function"
+        ? webview.getURL()
+        : activeUrlRef.current || activeUrl || urlText;
+    const externalUrl =
+      getExternalBrowserUrl(currentUrl || "") ||
+      getExternalBrowserUrl(activeUrl || "") ||
+      getExternalBrowserUrl(urlText);
+    if (!externalUrl) {
+      setToolbarNotice("No external page");
+      return;
+    }
+    try {
+      await window.electronAPI.openExternal(externalUrl);
+      setToolbarNotice("Opened externally");
+    } catch (error) {
+      setToolbarNotice(error instanceof Error ? error.message : "Open failed");
+    }
+  }, [activeUrl, urlText]);
+
   const applyViewportPreset = useCallback((preset: BrowserViewportOverride) => {
     setControlledViewport(preset);
     setToolbarNotice(preset.label);
@@ -971,6 +1008,15 @@ export function BrowserWorkbenchView({
             </span>
           )}
           {toolbarNotice && <span className="browser-workbench-toolbar-notice">{toolbarNotice}</span>}
+          <button
+            type="button"
+            className="browser-workbench-nav-btn browser-workbench-action-btn"
+            onClick={() => void openCurrentPageExternal()}
+            title="Open current page in external browser"
+            aria-label="Open current page in external browser"
+          >
+            <ExternalLink className="browser-workbench-lucide-icon" size={16} strokeWidth={2.2} aria-hidden="true" />
+          </button>
           <button
             type="button"
             className={`browser-workbench-nav-btn browser-workbench-action-btn ${snapshotOverlay ? "is-active" : ""}`}
