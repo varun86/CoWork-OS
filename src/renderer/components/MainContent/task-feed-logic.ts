@@ -488,6 +488,49 @@ export function collectInlineRunCommandSessionIds(args: {
   return inlineRunCommandSessionIds;
 }
 
+function getEvidenceSourceSet(event: TaskEvent): Set<string> {
+  const refs = Array.isArray(event.payload?.evidenceRefs) ? event.payload.evidenceRefs : [];
+  const sources = new Set<string>();
+  for (const ref of refs) {
+    if (!ref || typeof ref !== "object") continue;
+    const source = (ref as { sourceUrlOrPath?: unknown }).sourceUrlOrPath;
+    if (typeof source === "string" && source.trim().length > 0) {
+      sources.add(source.trim());
+    }
+  }
+  return sources;
+}
+
+export function isRedundantTimelineEvidenceEvent(event: TaskEvent, events: TaskEvent[]): boolean {
+  if (event.type !== "timeline_evidence_attached") return false;
+  const sources = getEvidenceSourceSet(event);
+  if (sources.size === 0) return false;
+
+  const eventIndex = events.findIndex(
+    (candidate) =>
+      candidate === event ||
+      (event.id.trim().length > 0 && candidate.id === event.id),
+  );
+  const previousEvents = (eventIndex >= 0 ? events.slice(0, eventIndex) : events).filter(
+    (candidate) => candidate.type === "timeline_evidence_attached",
+  );
+
+  for (const previousEvent of previousEvents) {
+    const previousSources = getEvidenceSourceSet(previousEvent);
+    if (previousSources.size < sources.size) continue;
+    let covered = true;
+    for (const source of sources) {
+      if (!previousSources.has(source)) {
+        covered = false;
+        break;
+      }
+    }
+    if (covered) return true;
+  }
+
+  return false;
+}
+
 export function estimateTaskFeedRowHeight(
   item: any,
   options?: {
