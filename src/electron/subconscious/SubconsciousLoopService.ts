@@ -1233,7 +1233,7 @@ export class SubconsciousLoopService {
 
   private countAcceptedSuggestionPatterns(workspaceId: string): number {
     try {
-      return MemoryService.search(workspaceId, "[suggestion-feedback:acted_on]", 20).length;
+      return MemoryService.searchByContentMarker(workspaceId, "[suggestion-feedback:acted_on]", 20).length;
     } catch {
       return 0;
     }
