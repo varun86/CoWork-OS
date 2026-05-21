@@ -716,6 +716,44 @@ describe("listModelInvocableSkills", () => {
     expect(ranked[0]?.skill.id).toBe("codex-cli");
   });
 
+  it("should require an explicit gemini skill invocation for ranking", async () => {
+    const geminiSkill = createTestSkill({
+      id: "gemini",
+      name: "Gemini",
+      description: "Gemini CLI for one-shot Q&A, summaries, and generation.",
+      category: "Tools",
+      metadata: {
+        routing: {
+          useWhen: "Use when the user asks to use Gemini CLI for one-shot Q&A.",
+          examples: {
+            positive: ["Use the gemini skill for this request."],
+            negative: ["Do not use gemini for unrelated requests."],
+          },
+        },
+      },
+    });
+
+    mockFiles.set("gemini.json", JSON.stringify(geminiSkill));
+
+    await loader.reloadSkills();
+
+    const productNewsPrompt =
+      "what's new about gemini based on the last google IO announcements";
+    expect(loader.rankModelInvocableSkillsForQuery(productNewsPrompt)).toEqual([]);
+
+    const productNewsDescriptions = loader.getSkillDescriptionsForModel({
+      routingQuery: productNewsPrompt,
+      shortlistSize: 5,
+    });
+    expect(productNewsDescriptions).not.toContain("- gemini:");
+
+    const explicitRanked = loader.rankModelInvocableSkillsForQuery(
+      "Use the gemini skill to answer this question.",
+    );
+    expect(explicitRanked).toHaveLength(1);
+    expect(explicitRanked[0]?.skill.id).toBe("gemini");
+  });
+
   it("should rank autoresearch-report for scientific literature prompts", async () => {
     const autoresearchReport = createTestSkill({
       id: "autoresearch-report",
