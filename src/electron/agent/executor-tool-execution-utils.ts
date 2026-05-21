@@ -976,6 +976,12 @@ export function isHardToolFailure(toolName: string, result: Any, failureReason =
     );
   }
 
+  if (toolName === "get_current_location") {
+    return /desktop geolocation|native desktop geolocation|core location|geoclue|windows location|timed out while getting current location|location access was denied|current location is unavailable|geolocation is not available/i.test(
+      message,
+    );
+  }
+
   return /not currently executable|blocked by|disabled|not available in this context|not configured/.test(
     message,
   );
