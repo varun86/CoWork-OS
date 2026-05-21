@@ -701,7 +701,7 @@ export class CustomSkillLoader {
   }
 
   private requiresExplicitSkillInvocation(skill: CustomSkill): boolean {
-    return skill.id === "codex-cli";
+    return skill.id === "codex-cli" || skill.id === "gemini";
   }
 
   private matchesExplicitSkillInvocationTarget(query: string, phrase: string): boolean {
