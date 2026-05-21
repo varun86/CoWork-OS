@@ -43,6 +43,7 @@ import {
 } from "../task-automation-utils";
 
 const mainContentPath = fileURLToPath(new URL("../MainContent/MainContent.tsx", import.meta.url));
+const messageUiPath = fileURLToPath(new URL("../MainContent/message-ui.tsx", import.meta.url));
 const appPath = fileURLToPath(new URL("../../App.tsx", import.meta.url));
 
 afterEach(() => {
@@ -470,6 +471,19 @@ describe("TaskSessionLineageFooter", () => {
     );
 
     expect(html).toBe("");
+  });
+});
+
+describe("message-level session forking", () => {
+  it("keeps the assistant message fork action wired to event-specific forks", () => {
+    const mainContentSource = readFileSync(mainContentPath, "utf8");
+    const messageUiSource = readFileSync(messageUiPath, "utf8");
+
+    expect(messageUiSource).toContain("MessageForkButton");
+    expect(messageUiSource).toContain("message-fork-btn");
+    expect(mainContentSource).toContain("onForkTaskSessionFromEvent");
+    expect(mainContentSource).toContain("fromEventId: event.id");
+    expect(mainContentSource).toContain("<MessageForkButton");
   });
 });
 
