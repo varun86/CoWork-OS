@@ -541,7 +541,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the full history of completed features.
 |-------|-------------|
 | [Getting Started](docs/getting-started.md) | First-time setup and usage |
 | [Beginner's Guide](docs/cowork-school.md) | Practical guide to what CoWork OS is for and which workflows to try first |
-| [Release Notes 0.5.45](docs/release-notes-0.5.45.md) | What is new in the latest release |
+| [Release Notes 0.5.47](docs/release-notes-0.5.47.md) | What is new in the latest release |
 | [Composer Mentions](docs/composer-mentions.md) | `@` autocomplete for agents, configured integrations, files, rich integration chips, and `@Inbox` routing |
 | [Message Box Shortcuts](docs/message-box-shortcuts.md) | `/` picker for deterministic app commands and skill-backed workflow shortcuts |
 | [Claude-for-Legal Workflows](docs/claude-for-legal.md) | Bundled legal practice slash commands, editable picker selection, and main-view matter intake cards |
