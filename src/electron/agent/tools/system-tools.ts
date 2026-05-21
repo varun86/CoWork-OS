@@ -1008,9 +1008,9 @@ export class SystemTools {
       const lane = input.lane || "all";
       const typeFilter = new Set((input.types || []).map((item) => String(item || "").trim()).filter(Boolean));
 
-      // Search the memory database (semantic + BM25 hybrid)
+      // Search the memory database off the Electron main thread when possible.
       const dbResults =
-        lane === "kit" ? [] : MemoryService.search(this.workspace.id, input.query, limit);
+        lane === "kit" ? [] : await MemoryService.searchAsync(this.workspace.id, input.query, limit);
 
       // Also search workspace markdown (.cowork/ kit files)
       let mdResults: typeof dbResults = [];
