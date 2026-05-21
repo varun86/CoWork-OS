@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const memoryFeatureMocks = vi.hoisted(() => ({
   loadSettings: vi.fn().mockReturnValue({
@@ -6,6 +6,7 @@ const memoryFeatureMocks = vi.hoisted(() => ({
     topicMemoryEnabled: true,
     verbatimRecallEnabled: true,
   }),
+  getCurrentLocation: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -24,9 +25,24 @@ vi.mock("../../../settings/memory-features-manager", () => ({
   },
 }));
 
+vi.mock("../../../location/DesktopLocationService", () => ({
+  getDesktopLocationService: () => ({
+    getCurrentLocation: memoryFeatureMocks.getCurrentLocation,
+  }),
+}));
+
 import { SystemTools } from "../system-tools";
 import { LayeredMemoryIndexService } from "../../../memory/LayeredMemoryIndexService";
 import { DurableContextService } from "../../../memory/DurableContextService";
+
+beforeEach(() => {
+  memoryFeatureMocks.getCurrentLocation.mockReset();
+  memoryFeatureMocks.loadSettings.mockReturnValue({
+    sessionRecallEnabled: true,
+    topicMemoryEnabled: true,
+    verbatimRecallEnabled: true,
+  });
+});
 
 describe("SystemTools.normalizeAppleScript", () => {
   // Access the private method through a test-only technique
@@ -100,6 +116,7 @@ describe("SystemTools.getToolDefinitions", () => {
     expect(tools.length).toBeGreaterThan(6);
     const names = tools.map((t) => t.name);
     expect(names).toContain("system_info");
+    expect(names).toContain("get_current_location");
     expect(names).toContain("read_clipboard");
     expect(names).toContain("run_applescript");
     expect(names).toContain("search_memories");
@@ -129,6 +146,7 @@ describe("SystemTools.getToolDefinitions", () => {
     expect(names).toContain("memory_topics_load");
     // Desktop-only tools should be excluded
     expect(names).not.toContain("read_clipboard");
+    expect(names).not.toContain("get_current_location");
     expect(names).not.toContain("take_screenshot");
     expect(names).not.toContain("open_application");
     expect(names).not.toContain("open_url");
@@ -173,6 +191,82 @@ describe("SystemTools.getToolDefinitions", () => {
     const headlessNames = SystemTools.getToolDefinitions({ headless: true }).map((t) => t.name);
     expect(headlessNames).toContain("context_grep");
     expect(headlessNames).toContain("context_describe");
+  });
+});
+
+describe("SystemTools.getCurrentLocation", () => {
+  it("returns a desktop location snapshot without logging exact coordinates", async () => {
+    const logEvent = vi.fn();
+    memoryFeatureMocks.getCurrentLocation.mockResolvedValueOnce({
+      latitude: 37.7749,
+      longitude: -122.4194,
+      accuracyMeters: 12.3,
+      timestamp: Date.parse("2026-05-20T12:00:00Z"),
+      source: "macos_core_location",
+    });
+    const instance = new SystemTools(
+      {
+        id: "ws-1",
+        name: "test",
+        path: "/tmp",
+        createdAt: 0,
+        permissions: { read: true, write: true, delete: false, network: true, shell: false },
+      },
+      { logEvent, requestApproval: vi.fn() } as Any,
+      "task-1",
+    );
+
+    const result = await instance.getCurrentLocation({ accuracy: "precise" });
+
+    expect(result).toMatchObject({
+      latitude: 37.7749,
+      longitude: -122.4194,
+      accuracyMeters: 12.3,
+      timestamp: "2026-05-20T12:00:00.000Z",
+      source: "macos_core_location",
+    });
+    expect(result.mapsUrl).toContain("37.7749,-122.4194");
+    expect(logEvent).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ latitude: 37.7749 }),
+    );
+  });
+
+  it("converts desktop geolocation timeouts into a non-retryable fast failure", async () => {
+    const logEvent = vi.fn();
+    memoryFeatureMocks.getCurrentLocation.mockRejectedValueOnce(
+      new Error("Timed out while getting current location."),
+    );
+    const instance = new SystemTools(
+      {
+        id: "ws-1",
+        name: "test",
+        path: "/tmp",
+        createdAt: 0,
+        permissions: { read: true, write: true, delete: false, network: true, shell: false },
+      },
+      { logEvent, requestApproval: vi.fn() } as Any,
+      "task-1",
+    );
+
+    await expect(instance.getCurrentLocation({ accuracy: "precise" })).rejects.toThrow(
+      "Do not retry get_current_location",
+    );
+    await expect(instance.getCurrentLocation({ accuracy: "coarse" })).rejects.toThrow(
+      "Do not retry get_current_location",
+    );
+
+    expect(memoryFeatureMocks.getCurrentLocation).toHaveBeenCalledTimes(1);
+    expect(logEvent).toHaveBeenCalledWith(
+      "task-1",
+      "tool_result",
+      expect.objectContaining({
+        tool: "get_current_location",
+        success: false,
+        error: expect.stringContaining("Location Services"),
+      }),
+    );
   });
 });
 
