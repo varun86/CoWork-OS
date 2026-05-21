@@ -612,6 +612,17 @@ export class TaskStrategyService {
       );
     }
 
+    if (route.signals.includes("local-errand-location")) {
+      lines.push(
+        "location_maps_contract:",
+        "- This request depends on the user's current location and nearby places.",
+        "- First get one-time desktop location permission with get_current_location.",
+        "- Then use the Maps MCP nearby ranking/search tools, preferably maps.rank_nearby_options via the configured MCP prefix.",
+        "- If location access is denied, unavailable, or times out, do not retry get_current_location in the same task; ask for a typed venue/address or landmark.",
+        "- Answer with the top walkable option, walking time, fit, open-status confidence, and a map/source link when available.",
+      );
+    }
+
     const imageTaskText = `${text}\n${route.signals.join(" ")}`;
     if (this.isSimpleImageGenerationTask(imageTaskText)) {
       lines.push(
