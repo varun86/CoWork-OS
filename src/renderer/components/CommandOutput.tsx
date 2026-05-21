@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 
 const DIR_NAME_MAX_LEN = 12;
+const DEFAULT_VISIBLE_OUTPUT_LINES = 300;
 
 function getDirName(cwd: string): string {
   const parts = cwd.replace(/\\/g, "/").split("/").filter(Boolean);
@@ -118,6 +119,15 @@ export function CommandOutput({
     }
     return output;
   })();
+  const visibleOutput = (() => {
+    const lines = displayOutput.split("\n");
+    if (isRunning || lines.length <= DEFAULT_VISIBLE_OUTPUT_LINES) return displayOutput;
+    const omitted = lines.length - DEFAULT_VISIBLE_OUTPUT_LINES;
+    return [
+      `[... ${omitted} earlier line${omitted === 1 ? "" : "s"} hidden ...]`,
+      ...lines.slice(-DEFAULT_VISIBLE_OUTPUT_LINES),
+    ].join("\n");
+  })();
 
   const getStatusIndicator = () => {
     if (isRunning) {
@@ -219,8 +229,8 @@ export function CommandOutput({
       <div ref={outputRef} className="command-output-content" onScroll={handleScroll}>
         <pre>
           {isRunning
-            ? displayOutput || "Waiting for output..."
-            : (displayOutput || "") + (displayOutput.endsWith("\n") ? "" : "\n") + `$ ${dirName ? dirName + " " : ""}%`}
+            ? visibleOutput || "Waiting for output..."
+            : (visibleOutput || "") + (visibleOutput.endsWith("\n") ? "" : "\n") + `$ ${dirName ? dirName + " " : ""}%`}
         </pre>
       </div>
       {!autoScroll && isRunning && (
