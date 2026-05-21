@@ -442,12 +442,28 @@ export class SubconsciousLoopService {
     }
     const targets = this.targetRepo.list();
     await this.artifactStore.writeBrainState(this.getBrainSummary(), targets);
+    this.pruneStaleMapEntries();
     logger.info("Refreshed targets", {
       targetCount: targets.length,
       evidenceCount,
       enabledTargetKinds: settings.enabledTargetKinds,
     });
     return { targetCount: targets.length, evidenceCount };
+  }
+
+  private pruneStaleMapEntries(): void {
+    const cutoff = now() - 24 * 60 * 60 * 1000;
+    for (const [key, evidence] of this.latestEvidenceByTarget) {
+      if (evidence.length === 0) {
+        this.latestEvidenceByTarget.delete(key);
+        continue;
+      }
+      const latest = Math.max(...evidence.map((e) => e.createdAt));
+      if (latest < cutoff) this.latestEvidenceByTarget.delete(key);
+    }
+    for (const [key, timestamp] of this.lastNotificationByIntent) {
+      if (timestamp < cutoff) this.lastNotificationByIntent.delete(key);
+    }
   }
 
   async runNow(targetKey?: string): Promise<SubconsciousRun | null> {
@@ -652,7 +668,7 @@ export class SubconsciousLoopService {
       const dispatchKind = this.resolveDispatchKind(target.target, evidence);
       const backlog = this.materializeBacklog(target.key, decision, dispatchKind);
       const policy = this.evaluatePolicy(target, decision, evidence, dispatchKind);
-      const autoDispatchAllowed = this.shouldAutoDispatchDecision({
+      const autoDispatchAllowed = await this.shouldAutoDispatchDecision({
         settings,
         target,
         dispatchKind,
@@ -1209,13 +1225,13 @@ export class SubconsciousLoopService {
     return now() - lastNotifiedAt >= policy.throttleMinutes * 60 * 1000;
   }
 
-  private shouldAutoDispatchDecision(input: {
+  private async shouldAutoDispatchDecision(input: {
     settings: SubconsciousSettings;
     target: SubconsciousTargetSummary;
     dispatchKind?: SubconsciousDispatchKind;
     policy: ReflectionPolicyEvaluation;
     evidence: SubconsciousEvidence[];
-  }): boolean {
+  }): Promise<boolean> {
     if (!input.settings.dispatchDefaults.autoDispatch) return false;
     if (!input.dispatchKind) return false;
     if (input.policy.permissionDecision !== "allowed") return false;
@@ -1223,7 +1239,7 @@ export class SubconsciousLoopService {
     const workspaceId = input.target.target.workspaceId;
     if (!workspaceId) return false;
     if (input.settings.trustedTargetKeys.includes(input.target.key)) return true;
-    const acceptedPatternCount = this.countAcceptedSuggestionPatterns(workspaceId);
+    const acceptedPatternCount = await this.countAcceptedSuggestionPatterns(workspaceId);
     const hasClearScope =
       input.target.target.kind === "workspace" ||
       input.target.target.kind === "pull_request" ||
@@ -1231,9 +1247,9 @@ export class SubconsciousLoopService {
     return acceptedPatternCount >= 2 && hasClearScope && input.evidence.length <= 8;
   }
 
-  private countAcceptedSuggestionPatterns(workspaceId: string): number {
+  private async countAcceptedSuggestionPatterns(workspaceId: string): Promise<number> {
     try {
-      return MemoryService.searchByContentMarker(workspaceId, "[suggestion-feedback:acted_on]", 20).length;
+      return (await MemoryService.searchByContentMarkerAsync(workspaceId, "[suggestion-feedback:acted_on]", 2)).length;
     } catch {
       return 0;
     }
