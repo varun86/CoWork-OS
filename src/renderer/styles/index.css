@@ -81,6 +81,8 @@ button:focus-visible,
   --density-timeline-event-intrinsic-size: 40px;
 
   /* Typography - consistent font stacks */
+  --font-google-sans:
+    "Google Sans Flex", "Google Sans", "Helvetica Neue", Arial, sans-serif;
   --font-ui:
     "Source Sans 3", "Helvetica Neue", "Segoe UI", Helvetica, Arial, sans-serif;
   --font-content:
@@ -3309,8 +3311,10 @@ a,
 .cli-task-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px 0 16px !important;
+  gap: 5px;
+  min-height: 22px;
+  margin-bottom: 0;
+  padding: 0 6px 0 16px !important;
   padding-left: var(--cli-task-padding-left, 16px) !important;
   border-radius: 0 !important;
   background: transparent !important;
@@ -4051,7 +4055,7 @@ a,
 .cli-task-title {
   display: block;
   font-size: 12px;
-  line-height: 1.25;
+  line-height: 1.2;
   color: var(--color-text-secondary);
   overflow: hidden;
   text-overflow: clip;
@@ -4061,7 +4065,7 @@ a,
 .cli-task-title-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -4078,10 +4082,10 @@ a,
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 4px;
   flex-shrink: 0;
   margin-left: auto;
-  min-height: 22px;
+  min-height: 18px;
 }
 
 .cli-task-action-wrap {
@@ -4090,7 +4094,7 @@ a,
   justify-content: flex-end;
   flex-shrink: 0;
   margin-left: auto;
-  min-height: 22px;
+  min-height: 18px;
 }
 
 .cli-task-title-with-agent {
@@ -4124,8 +4128,8 @@ a,
 
 .cli-task-time {
   flex-shrink: 0;
-  min-width: 34px;
-  font-size: 11px;
+  min-width: 28px;
+  font-size: 10px;
   color: var(--color-text-muted);
   text-align: right;
 }
@@ -4193,7 +4197,7 @@ a,
 .cli-task-item:hover .cli-task-actions,
 .cli-task-item:focus-within .cli-task-actions,
 .cli-task-actions:has(.task-item-menu) {
-  width: 26px;
+  width: 22px;
   overflow: visible;
   opacity: 1;
   pointer-events: auto;
@@ -4214,14 +4218,14 @@ a,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   color: var(--color-text-muted);
   background: color-mix(in srgb, var(--color-accent) 6%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-accent) 42%, transparent);
   padding: 0;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 7px;
   transition:
     background 0.15s ease,
     border-color 0.15s ease,
@@ -11412,7 +11416,7 @@ a,
   line-height: 1;
 }
 
-/* Color letter avatar */
+/* Brand icon with letter fallback */
 .cm-card-icon {
   width: 40px;
   height: 40px;
@@ -11425,6 +11429,29 @@ a,
   color: white;
   flex-shrink: 0;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.cm-brand-icon {
+  overflow: hidden;
+  background: var(--connector-color);
+}
+
+.cm-brand-icon--fallback {
+  background: var(--connector-color);
+}
+
+.cm-brand-icon--image {
+  background: color-mix(in srgb, var(--color-bg-elevated) 86%, white 14%);
+  border: 1px solid var(--color-border-subtle, var(--color-border));
+  color: var(--color-text);
+  box-shadow: var(--shadow-sm);
+}
+
+.cm-brand-icon img {
+  width: 70%;
+  height: 70%;
+  object-fit: contain;
+  display: block;
 }
 
 .cm-card-body {
@@ -23760,7 +23787,7 @@ a,
 
 /* Sidebar date group headers */
 .sidebar-date-group {
-  padding: 10px 12px 4px 20px;
+  padding: 6px 12px 2px 20px;
   font-size: 11px;
   font-weight: 600;
   color: var(--color-text-muted, #6b7280);
@@ -25143,12 +25170,12 @@ a,
 }
 
 /* Task items: tight, clean, text-only feel */
-.density-focused .task-item {
-  padding: 1px 12px;
-  gap: 6px;
+.density-focused .cli-task-item {
+  padding: 0 6px !important;
+  padding-left: var(--cli-task-padding-left, 12px) !important;
+  gap: 5px;
   font-family: var(--font-ui);
-  border-radius: 8px;
-  min-height: unset;
+  min-height: 22px;
 }
 
 .density-focused .task-item-content {
@@ -25159,7 +25186,7 @@ a,
   font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 400;
-  line-height: 1.3;
+  line-height: 1.15;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -25269,7 +25296,7 @@ a,
   font-size: 10px;
   color: var(--color-text-muted);
   letter-spacing: 0.05em;
-  padding: 8px 12px 2px 20px;
+  padding: 5px 12px 1px 32px;
   opacity: 0.6;
 }
 
@@ -25370,7 +25397,7 @@ a,
 
 /* First date group needs less top padding */
 .density-focused .sidebar-date-group:first-child {
-  padding-top: 4px;
+  padding-top: 3px;
 }
 
 /* Sidebar footer: compact */
@@ -29025,5 +29052,29 @@ html.platform-darwin.theme-light .sidebar.cli-sidebar {
 
 .input-row > .workspace-dropdown-container:empty {
   display: none;
+}
+
+html
+  :is(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+    textarea,
+    select,
+    .prompt-composer-input,
+    .input-field,
+    .input-textarea,
+    .welcome-input,
+    .cli-input,
+    .settings-input,
+    .settings-textarea,
+    .skill-param-input,
+    .onboarding-input,
+    .onboarding-textarea,
+    .command-stdin-input,
+    [role="textbox"]
+  ) {
+  font-family: var(--font-google-sans);
+  font-variant-ligatures: none;
+  font-variation-settings: "ROND" 0, "slnt" 0, "wdth" 92;
+  letter-spacing: 0;
 }
 /* ==================== END CRITICAL TASK COMPOSER STARTUP STYLES ==================== */
