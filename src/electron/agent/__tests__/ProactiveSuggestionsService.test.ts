@@ -8,6 +8,7 @@ const repoSave = vi.fn();
 vi.mock("../../memory/MemoryService", () => ({
   MemoryService: {
     search: (...args: unknown[]) => memorySearch(...args),
+    searchByContentMarker: (...args: unknown[]) => memorySearch(...args),
     capture: (...args: unknown[]) => memoryCapture(...args),
     getRecent: vi.fn(() => []),
   },
