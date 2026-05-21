@@ -342,9 +342,7 @@ function isLowValueVerboseLifecycleEvent(event: TaskEvent): boolean {
   }
 
   if (event.type === "timeline_group_started") {
-    if (isStageBoundaryTimelineGroupEvent(event)) {
-      return true;
-    }
+    return false;
   }
 
   // timeline_step_finished events echo tool/step completion that is already
@@ -378,6 +376,17 @@ function isLowValueVerboseLifecycleEvent(event: TaskEvent): boolean {
   return false;
 }
 
+function isVerbosePostFailureCutoffEvent(event: TaskEvent): boolean {
+  const effectiveType = getEffectiveTaskEventType(event);
+  return (
+    event.type === "timeline_error" ||
+    effectiveType === "error" ||
+    effectiveType === "step_failed" ||
+    effectiveType === "verification_failed" ||
+    effectiveType === "verification_pending_user_action"
+  );
+}
+
 /**
  * In verbose mode, hide internal lifecycle chatter so the feed stays readable.
  * Progress updates are intentionally hidden entirely; they are executor status beacons,
@@ -392,8 +401,16 @@ export function filterVerboseTimelineNoise(events: TaskEvent[]): TaskEvent[] {
       .filter((event) => getEffectiveTaskEventType(event) === "task_cancelled")
       .map((event) => event.taskId),
   );
+  const taskIdsAfterBlockingFailure = new Set<string>();
   for (const event of events) {
     if (cancelledTaskIds.has(event.taskId) && isLlmRequestCancelledEvent(event)) continue;
+    if (
+      taskIdsAfterBlockingFailure.has(event.taskId) &&
+      event.type === "timeline_group_started" &&
+      isStageBoundaryTimelineGroupEvent(event)
+    ) {
+      continue;
+    }
     if (isLowValueVerboseLifecycleEvent(event)) continue;
     if (getEffectiveTaskEventType(event) === "progress_update") continue;
     const exactId =
@@ -418,6 +435,9 @@ export function filterVerboseTimelineNoise(events: TaskEvent[]): TaskEvent[] {
       lastSeenByKey.set(duplicateKey, event.timestamp ?? 0);
     }
     out.push(event);
+    if (isVerbosePostFailureCutoffEvent(event)) {
+      taskIdsAfterBlockingFailure.add(event.taskId);
+    }
   }
   return out;
 }
@@ -440,11 +460,15 @@ export function shouldShowTaskEventInSummaryMode(
   return true;
 }
 
-export function shouldShowTaskEventInStepFeed(event: TaskEvent): boolean {
+export function shouldShowTaskEventInStepFeed(
+  event: TaskEvent,
+  options?: { verboseSteps?: boolean },
+): boolean {
   if (isToolBatchTimelineGroupEvent(event)) return false;
   if (isToolBatchLaneEvent(event)) return false;
 
   if (isStageBoundaryTimelineGroupEvent(event)) {
+    if (options?.verboseSteps) return true;
     return isSubStageTimelineGroupEvent(event);
   }
 
