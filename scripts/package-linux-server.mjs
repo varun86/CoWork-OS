@@ -7,12 +7,11 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const RELEASE_DIR = path.join(ROOT, "release");
-const SERVER_DEPENDENCY_EXCLUDES = new Set(["@electron/rebuild"]);
+const SERVER_DEPENDENCY_EXCLUDES = new Set(["@electron/rebuild", "electron", "electron-updater"]);
 const REQUIRED_PATHS = [
   "bin/coworkd-node.js",
   "bin/coworkctl.js",
@@ -35,14 +34,6 @@ function run(command, args, options = {}) {
   }
 
   return result;
-}
-
-function electronInstallEnv() {
-  const env = { ...process.env };
-  delete env.ELECTRON_SKIP_BINARY_DOWNLOAD;
-  env.npm_config_platform = "linux";
-  env.npm_config_arch = "x64";
-  return env;
 }
 
 async function exists(targetPath) {
@@ -158,55 +149,6 @@ function prunePackageJsonForServer(pkg) {
   return serverPkg;
 }
 
-async function assertElectronBinaryInstalled(packageRoot) {
-  const packageRequire = createRequire(path.join(packageRoot, "package.json"));
-  const electronPath = packageRequire("electron");
-  if (typeof electronPath !== "string" || electronPath.length === 0) {
-    throw new Error("Expected require('electron') to resolve to an Electron binary path.");
-  }
-
-  const stat = await fsp.stat(electronPath).catch(() => null);
-  if (!stat?.isFile()) {
-    throw new Error(`Electron binary was not installed at ${electronPath}.`);
-  }
-}
-
-async function ensureElectronBinaryInstalled(packageRoot) {
-  const electronDir = path.join(packageRoot, "node_modules", "electron");
-  const pathTxt = path.join(electronDir, "path.txt");
-
-  run(process.execPath, ["node_modules/electron/install.js"], {
-    cwd: packageRoot,
-    env: electronInstallEnv(),
-  });
-
-  if (await exists(pathTxt)) {
-    return;
-  }
-
-  console.log("[linux-server-package] electron/install.js did not create path.txt; downloading Linux x64 Electron manually.");
-
-  const packageRequire = createRequire(path.join(packageRoot, "package.json"));
-  const { downloadArtifact } = packageRequire("@electron/get");
-  const extract = packageRequire("extract-zip");
-  const electronPkg = packageRequire(path.join(electronDir, "package.json"));
-  const checksums = packageRequire(path.join(electronDir, "checksums.json"));
-  const distDir = path.join(electronDir, "dist");
-
-  const zipPath = await downloadArtifact({
-    version: electronPkg.version,
-    artifactName: "electron",
-    platform: "linux",
-    arch: "x64",
-    checksums,
-  });
-
-  await fsp.rm(distDir, { recursive: true, force: true });
-  await fsp.mkdir(distDir, { recursive: true });
-  await extract(zipPath, { dir: distDir });
-  await fsp.writeFile(pathTxt, "electron");
-}
-
 async function writeInstallNotes(packageRoot, version) {
   const content = `# CoWork OS Linux Server Package
 
@@ -310,8 +252,6 @@ async function main() {
     run("npm", ["install", "--omit=dev", "--include=optional", "--ignore-scripts", "--no-audit", "--no-fund"], {
       cwd: packageRoot,
     });
-    await ensureElectronBinaryInstalled(packageRoot);
-    await assertElectronBinaryInstalled(packageRoot);
     run("npm", ["rebuild", "--ignore-scripts=false", "better-sqlite3"], { cwd: packageRoot });
 
     await fsp.mkdir(RELEASE_DIR, { recursive: true });

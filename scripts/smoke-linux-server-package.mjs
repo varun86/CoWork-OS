@@ -1,13 +1,11 @@
 #!/usr/bin/env node
 
 import { spawn, spawnSync } from "node:child_process";
-import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -25,7 +23,6 @@ const REQUIRED_FILES = [
   "resources/branding/cowork-os-app-logo-light.png",
   "resources/persona-templates/software-engineer.json",
   "node_modules/better-sqlite3/package.json",
-  "node_modules/electron/package.json",
 ];
 
 function run(command, args, options = {}) {
@@ -62,21 +59,6 @@ async function findTarball() {
   }
 
   return path.join(RELEASE_DIR, candidates[0]);
-}
-
-async function assertElectronBinaryInstalled(packageRoot) {
-  const packageRequire = createRequire(path.join(packageRoot, "package.json"));
-  const electronPath = packageRequire("electron");
-  if (typeof electronPath !== "string" || electronPath.length === 0) {
-    throw new Error("Expected require('electron') to resolve to an Electron binary path.");
-  }
-
-  const stat = await fs.stat(electronPath).catch(() => null);
-  if (!stat?.isFile()) {
-    throw new Error(`Electron binary was not installed at ${electronPath}.`);
-  }
-
-  await fs.access(electronPath, fsConstants.X_OK);
 }
 
 async function waitForHealth(port, child, timeoutMs = 60000) {
@@ -140,7 +122,6 @@ async function main() {
     }
 
     run(process.execPath, ["bin/coworkd-node.js", "--help"], { cwd: packageRoot });
-    await assertElectronBinaryInstalled(packageRoot);
     run(
       process.execPath,
       [
