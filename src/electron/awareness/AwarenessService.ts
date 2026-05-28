@@ -3,7 +3,6 @@ import path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { createHash, randomUUID } from "crypto";
-import { clipboard } from "electron";
 import {
   AwarenessBelief,
   AwarenessBeliefType,
@@ -41,6 +40,15 @@ const BROWSER_APPS = new Set([
   "Microsoft Edge",
   "Firefox",
 ]);
+
+function readClipboardText(): string {
+  try {
+    const electron = require("electron") as { clipboard?: { readText?: () => string } };
+    return String(electron.clipboard?.readText?.() || "");
+  } catch {
+    return "";
+  }
+}
 
 interface PersistedAwarenessState {
   config: AwarenessConfig;
@@ -816,7 +824,7 @@ export class AwarenessService {
   }
 
   private async pollClipboard(workspaceId?: string): Promise<void> {
-    const text = String(clipboard.readText() || "").trim();
+    const text = readClipboardText().trim();
     if (!text) return;
     const nextFingerprint = fingerprint([text.slice(0, 120), text.length]);
     if (nextFingerprint === this.lastClipboardFingerprint) return;

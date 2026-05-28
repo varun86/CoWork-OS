@@ -8,7 +8,6 @@
 import { EventEmitter } from "events";
 import * as fs from "fs";
 import * as path from "path";
-import { app } from "electron";
 import {
   SecureSettingsRepository,
   type SettingsCategory,
@@ -459,7 +458,7 @@ export class PluginRegistry extends EventEmitter {
     const runtime: PluginRuntime = {
       version: COWORK_VERSION,
       platform: process.platform,
-      appDataPath: app?.getPath?.("userData") || path.join(process.env.HOME || process.env.USERPROFILE || "", ".cowork"),
+      appDataPath: getUserDataDir(),
       pluginDataPath: getPluginDataPath(pluginName),
       isDev: process.env.NODE_ENV === "development",
     };

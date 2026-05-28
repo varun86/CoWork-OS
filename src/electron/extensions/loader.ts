@@ -10,8 +10,8 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { app } from "electron";
 import { getCapabilityBundleSecurityService } from "../security/capability-bundle-security";
+import { getUserDataDir } from "../utils/user-data-dir";
 import {
   PluginManifest,
   Plugin,
@@ -26,11 +26,17 @@ import {
 const MANIFEST_FILENAME = "cowork.plugin.json";
 const securityService = getCapabilityBundleSecurityService();
 
+function getElectronApp(): { isPackaged?: boolean } | null {
+  try {
+    const electron = require("electron") as { app?: { isPackaged?: boolean } };
+    return electron.app ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function getUserExtensionsDir(): string {
-  const userDataPath =
-    app?.getPath?.("userData") ||
-    path.join(process.env.HOME || process.env.USERPROFILE || "", ".cowork");
-  return path.join(userDataPath, "extensions");
+  return path.join(getUserDataDir(), "extensions");
 }
 
 function normalizeLegacyAuthor(author?: string): string | undefined {
@@ -58,8 +64,10 @@ const getDefaultExtensionsDirs = (): string[] => {
   }
 
   // Built-in plugin packs
-  const pluginPacksDir = app.isPackaged
-    ? path.join(process.resourcesPath || "", "plugin-packs")
+  const electronApp = getElectronApp();
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  const pluginPacksDir = electronApp?.isPackaged
+    ? path.join(resourcesPath || "", "plugin-packs")
     : path.join(process.cwd(), "resources", "plugin-packs");
   if (fs.existsSync(pluginPacksDir)) {
     dirs.push(pluginPacksDir);
@@ -334,8 +342,7 @@ export async function loadPlugin(pluginPath: string): Promise<PluginLoadResult> 
  * Create the user extensions directory if it doesn't exist
  */
 export function ensureExtensionsDirectory(): string {
-  const userDataPath = app?.getPath?.("userData") || path.join(process.env.HOME || process.env.USERPROFILE || "", ".cowork");
-  const extensionsDir = path.join(userDataPath, "extensions");
+  const extensionsDir = getUserExtensionsDir();
 
   if (!fs.existsSync(extensionsDir)) {
     fs.mkdirSync(extensionsDir, { recursive: true });
@@ -348,8 +355,7 @@ export function ensureExtensionsDirectory(): string {
  * Get the path to a plugin's data directory
  */
 export function getPluginDataPath(pluginName: string): string {
-  const userDataPath = app?.getPath?.("userData") || path.join(process.env.HOME || process.env.USERPROFILE || "", ".cowork");
-  const pluginDataDir = path.join(userDataPath, "plugin-data", pluginName);
+  const pluginDataDir = path.join(getUserDataDir(), "plugin-data", pluginName);
 
   if (!fs.existsSync(pluginDataDir)) {
     fs.mkdirSync(pluginDataDir, { recursive: true });
