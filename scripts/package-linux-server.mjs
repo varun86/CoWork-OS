@@ -37,6 +37,14 @@ function run(command, args, options = {}) {
   return result;
 }
 
+function electronInstallEnv() {
+  const env = { ...process.env };
+  delete env.ELECTRON_SKIP_BINARY_DOWNLOAD;
+  env.npm_config_platform = "linux";
+  env.npm_config_arch = "x64";
+  return env;
+}
+
 async function exists(targetPath) {
   try {
     await fsp.access(targetPath);
@@ -266,7 +274,10 @@ async function main() {
     run("npm", ["install", "--omit=dev", "--include=optional", "--ignore-scripts", "--no-audit", "--no-fund"], {
       cwd: packageRoot,
     });
-    run(process.execPath, ["node_modules/electron/install.js"], { cwd: packageRoot });
+    run(process.execPath, ["node_modules/electron/install.js"], {
+      cwd: packageRoot,
+      env: electronInstallEnv(),
+    });
     await assertElectronBinaryInstalled(packageRoot);
     run("npm", ["rebuild", "--ignore-scripts=false", "better-sqlite3"], { cwd: packageRoot });
 
