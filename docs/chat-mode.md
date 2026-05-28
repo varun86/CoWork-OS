@@ -12,6 +12,8 @@ It is intentionally different from task execution modes:
 
 There is one narrow exception: if a chat turn includes uploaded PDF attachment metadata and the user asks for content that goes beyond the compact excerpt, CoWork promotes that turn to read-only analysis mode so the document parser can read the attached PDF. This does not enable mutating tools.
 
+Side Chat also uses chat execution mode internally, but it is a separate right-side session type with a parent-task boundary. See [Side Chat](side-chat.md).
+
 ## Behavior
 
 - The user prompt is sent directly to the LLM as a chat request.
@@ -38,3 +40,11 @@ Use chat mode when you want a normal assistant conversation:
 If you want CoWork OS to execute work, create artifacts, or use tools, use one of the task modes instead.
 
 If you attach a PDF and ask CoWork to summarize it, answer questions from it, extract clauses, compare sections, or transform it into another format, CoWork may leave direct chat for that turn and use read-only analysis so it can inspect the full document safely.
+
+## Side Chat Relationship
+
+Side Chat is built on the same no-tools chat path, but it is not a normal chat session.
+
+Side Chat is for asking about an active parent task while that task keeps running. It opens from `/side`, appears in the right panel, hides inherited parent transcript events from the visible side transcript, and injects fresh parent-status context for progress questions.
+
+Normal chat mode is for direct conversation. Side Chat is for read-only inspection of another running session. Side questions must not steer, approve, cancel, or mutate the parent task.

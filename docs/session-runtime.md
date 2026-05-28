@@ -51,6 +51,8 @@ When the user sends the first prompt in the forked task, execution follows the n
 
 In the sidebar, forked sessions are ordinary recent sessions and should appear near the top by recency. They are not nested under the source session. UI surfaces may still use `branchFromTaskId` to show a parent-thread link in the conversation header.
 
+Side Chat uses fork lineage for a stricter read-only side conversation about a running parent task. Side-chat tasks are marked with `source: "side_chat"` / `branchLabel: "side-chat"`, hide cloned parent events from the visible side transcript, inject live parent-status context for progress questions, and run in chat mode with tools denied so the side conversation cannot steer the parent. See [Side Chat](side-chat.md).
+
 ## Tool Availability and Rendering
 
 SessionRuntime also owns the runtime-facing available-tools path used by execution and follow-up turns.

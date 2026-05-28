@@ -47,6 +47,7 @@ Docs:
 - Linux VPS guide: `docs/vps-linux.md`
 - Node-only daemon details: `docs/node-daemon.md`
 - Remote access patterns (SSH tunnel/Tailscale): `docs/remote-access.md`
+- Secure private MCP access: `docs/secure-mcp-tunnels.md`
 
 ## How You Use It (Interfaces)
 
@@ -88,6 +89,7 @@ Works well:
 
 - Task execution engine + tool runtime (file ops, web fetch, integrations, MCP)
 - Control Plane (WebSocket API + minimal Web UI)
+- Secure MCP Tunnel relay for outbound-only private MCP access, when run with an admin token and a private/TLS deployment
 - Cron scheduling + channel delivery (optional)
 - Messaging channels (Telegram/Discord/Slack/etc) if configured
 

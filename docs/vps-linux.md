@@ -578,6 +578,8 @@ Open it in your browser, paste the Control Plane token, and you can:
 
 Also see: `docs/remote-access.md` (SSH + Tailscale Serve/Funnel).
 
+For private MCP tool access, use Secure MCP Tunnels instead of exposing connector or MCP host ports directly. The tunnel client holds an outbound WebSocket to a CoWork-operated relay, while callers authenticate with a separate caller token and relay-side policy. See `docs/secure-mcp-tunnels.md`.
+
 ## Approvals Over Control Plane
 
 In headless mode, approval prompts (shell commands, deletions, etc.) can be handled remotely over the Control Plane:

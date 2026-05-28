@@ -231,6 +231,8 @@ After the user sends the first prompt in the fork, execution resumes through the
 
 Forked sessions are listed as top-level recent sessions in the sidebar. The source relationship is still available through `branchFromTaskId`, so detail views can offer parent navigation without changing the session list hierarchy.
 
+Side Chat is a special fork-backed session source for questions about an active parent task. Unlike a normal fork, it starts as read-only chat, keeps cloned parent events hidden from the side panel transcript, injects live parent-status context for status questions, and denies tools so side questions cannot steer or mutate the parent session. See [Side Chat](side-chat.md).
+
 ## Output Budget Policy
 
 When `COWORK_LLM_OUTPUT_POLICY=adaptive` is enabled, execution turns use a centralized output-budget resolver instead of depending on scattered per-provider defaults.

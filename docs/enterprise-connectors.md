@@ -72,6 +72,18 @@ Operational notes:
 - reconnects rebuild tool/resource catalogs and re-apply the active subscription set
 - stale or failed subscriptions degrade to normal connector access rather than crashing the task runtime; operators should inspect connector status when trigger-driven automations stop firing
 
+## Secure MCP Tunnels
+
+Secure MCP Tunnels are the governed remote-access path for private MCP tools. Instead of exposing a connector port publicly, the local CoWork app opens an outbound WebSocket to a relay you operate, and remote callers send MCP JSON-RPC through that relay with a separate caller token.
+
+Use this when:
+
+- a hosted/remote CoWork surface needs to call a user's local CoWork MCP host
+- a connector runs on a private LAN and should not be published directly
+- an operator wants MCP access without ngrok, localtunnel, or a third-party tunnel service
+
+Secure MCP Tunnels enforce relay-side and local policy, including tool allowlists, read-only mode, request/response size limits, and audit events. See [Secure MCP Tunnels](secure-mcp-tunnels.md) for setup and relay operation.
+
 ## Shipped Connector Allowlist
 
 The shipped connector catalog includes **44 connectors** across CRM, productivity, devtools, communication, legal, and finance categories. Install from **Settings > Connectors > Browse Registry**.

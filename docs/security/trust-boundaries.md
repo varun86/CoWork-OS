@@ -75,6 +75,53 @@ When `unrestrictedFileAccess` is enabled:
 
 Imported skills, plugin packs, declarative connector manifests, and bundled scripts are treated as a separate trust boundary from built-in content.
 
+## Secure MCP Tunnel Boundary
+
+Secure MCP Tunnels create a narrow remote MCP boundary rather than a general network proxy.
+
+```
++-----------------------------+
+| Remote caller               |
+| - caller token              |
++-----------------------------+
+              |
+              | MCP JSON-RPC over HTTPS
+              v
++-----------------------------+
+| Secure MCP tunnel relay     |
+| - admin-provisioned record  |
+| - relay-side policy         |
+| - active WebSocket session  |
++-----------------------------+
+              |
+              | outbound WebSocket from local CoWork
+              v
++-----------------------------+
+| Local CoWork tunnel client  |
+| - client token              |
+| - local policy              |
+| - audit event emission      |
++-----------------------------+
+              |
+              | HTTP POST /mcp only
+              v
++-----------------------------+
+| Private MCP target          |
+| - CoWork MCP host           |
+| - loopback/private endpoint |
++-----------------------------+
+```
+
+Important boundaries:
+
+- the relay must not become a generic HTTP proxy
+- remote callers never choose an arbitrary target URL
+- relay-side policy is authoritative and cannot be relaxed by the local client
+- client and caller tokens are separate
+- public/non-loopback relay deployments must use HTTPS/WSS
+
+See [Secure MCP Tunnels](../secure-mcp-tunnels.md) for setup and operational guidance.
+
 ## Imported File Content Boundary
 
 User-imported files, drag-and-drop data, pasted file data, channel attachments, and uploaded PDFs are also separate trust boundaries from the user's actual request.

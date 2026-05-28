@@ -51,6 +51,9 @@ hero:
       text: Message Box Shortcuts
       link: /message-box-shortcuts
     - theme: alt
+      text: Side Chat
+      link: /side-chat
+    - theme: alt
       text: Claude-for-Legal
       link: /claude-for-legal
     - theme: alt
@@ -153,6 +156,8 @@ features:
     details: WhatsApp, Telegram, Discord, Slack, iMessage, Teams, Google Chat, Feishu/Lark, WeCom, and more. Chat with your AI from anywhere, with channel/chat/thread specialization for workspace, agent role, prompt guidance, tool policy, and shared-memory opt-in.
   - title: Chat Mode
     details: Direct LLM chat with no tools by default, same-session follow-ups, chat-only streaming for supported providers, and a narrow read-only analysis exception for uploaded PDF turns that need deeper document reading.
+  - title: Side Chat
+    details: Ask questions about an active running session from the right side panel without steering or stopping the parent task. Side Chat uses a read-only side fork with hidden parent context, live status snapshots for progress questions, a side-only visible transcript, and Markdown-rendered answers.
   - title: Runtime Visibility
     details: Visible learning progression after each task, unified recall across tasks/messages/files, persistent shell sessions, and live provider routing/fallback status.
   - title: Structured Memory
@@ -182,7 +187,7 @@ features:
   - title: Composer Mentions
     details: Type `@` in the composer to pick Agents, configured Integrations, or Files. Integration chips render with icon and label in prompts and user message history, and selected integration metadata reaches the runtime as soft routing guidance rather than tool restrictions.
   - title: Message Box Shortcuts
-    details: Type `/` in the composer to pick deterministic app commands and skill-backed workflow shortcuts from one menu, including `/schedule`, `/schedule here`, `/clear`, `/plan`, `/cost`, `/multitask`, `/compact`, `/doctor`, `/undo`, direct skill IDs, plugin aliases, and the bundled CoWork Shortcuts pack. Skill-backed picker selections insert the command token so users can add context before sending.
+    details: Type `/` in the composer to pick deterministic app commands and skill-backed workflow shortcuts from one menu, including `/side`, `/schedule`, `/schedule here`, `/clear`, `/plan`, `/cost`, `/multitask`, `/compact`, `/doctor`, `/undo`, direct skill IDs, plugin aliases, and the bundled CoWork Shortcuts pack. Skill-backed picker selections insert the command token so users can add context before sending.
   - title: Claude-for-Legal Workflows
     details: Bundled legal practice packs expose upstream-style slash commands through CoWork's plugin-pack system. Legal workflow selections are editable before launch, and matter-heavy tasks can show structured main-view intake cards such as the dedicated demand-letter intake form.
   - title: Multitask Command
@@ -211,6 +216,8 @@ features:
     details: Multi-agent collaboration with shared checklists, collaborative mode, multi-LLM synthesis, and performance reviews.
   - title: Enterprise Connectors
     details: 44 MCP connectors including Salesforce, Jira, HubSpot, Zendesk, Stripe, Tavily, Grafana, Metabase, and more, with connector notifications available to automations and configured connector mentions available from the composer.
+  - title: Secure MCP Tunnels
+    details: Self-hosted outbound-only relay support lets remote CoWork callers reach selected local or private MCP tools without relying on OpenAI tunnel hosting, ngrok, localtunnel, or public inbound ports on the user's machine.
   - title: Federated Agents
     details: Discover ACP agents, delegate to local or remote specialists, persist ACP task state locally, and invoke A2A-compatible endpoints under shared approvals and endpoint-validation rules.
   - title: Security First

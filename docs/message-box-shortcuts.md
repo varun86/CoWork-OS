@@ -28,6 +28,7 @@ The built-in app command catalog is:
 
 | Command | Behavior |
 |---------|----------|
+| `/side [question]` | Opens a right-side Side Chat panel for the selected active task. The side task is a read-only chat fork that can answer questions about the parent session without steering, stopping, approving, or mutating the parent task. If `[question]` is provided, it is sent as the first side-chat message. See [Side Chat](side-chat.md). |
 | `/schedule ...` | Creates, lists, enables, disables, or deletes scheduled tasks through the deterministic schedule handler. Plain `/schedule ...` creates standalone scheduled work; `/schedule here ...` and schedule prompts that clearly ask to return to this conversation create a scheduled follow-up for the selected task thread. |
 | `/clear` | Clears the current task/chat view without deleting history and without switching the current workspace. |
 | `/plan <task>` | Creates a new task in Plan execution mode using `<task>` as the prompt. |
@@ -44,6 +45,8 @@ The built-in app command catalog is:
 | `/review [target]` | Invokes the code-review workflow for local changes, a PR, or the requested focus in the current regular workspace. It is unavailable in temporary workspaces. |
 
 `/clear` is intentionally view-only. It deselects the current task and clears visible events, but it does not delete task history or move the user into a new temporary workspace.
+
+`/side` requires a selected task because the side conversation is scoped to that parent session. It accepts text questions only. The visible Side Chat panel shows only side-chat messages; inherited parent transcript and live parent-status context remain hidden prompt context. Status-style questions such as `how is it going?` receive a fresh parent-status snapshot before the side response is generated.
 
 ## Workflow Shortcuts
 
@@ -170,6 +173,9 @@ Customize remains the authoring and enable/disable surface. There is no separate
 | App command catalog and parser | `src/shared/message-shortcuts.ts` |
 | Renderer picker option builder | `src/renderer/utils/message-slash-options.ts` |
 | Main composer integration | `src/renderer/components/MainContent.tsx` |
+| Side Chat panel and `/side` app wiring | `src/renderer/components/SideChatPanel.tsx`, `src/renderer/App.tsx` |
+| Side task fork and live parent-status injection | `src/electron/agent/daemon.ts` |
+| Side Chat prompt rules and read-only chat execution | `src/electron/agent/executor.ts` |
 | Claude-for-Legal intake detection and follow-up serialization | `src/renderer/utils/legal-demand-intake.ts` |
 | Safe `/clear` view handling | `src/renderer/App.tsx` |
 | Plugin alias backend resolution | `src/electron/agent/skill-slash-aliases.ts` |
@@ -190,8 +196,12 @@ npx vitest run \
   src/shared/__tests__/multitask-command.test.ts \
   src/electron/agents/__tests__/MultitaskLanePlanner.test.ts \
   src/electron/agents/__tests__/AgentTeamOrchestrator.test.ts \
+  src/electron/agent/__tests__/daemon-fork-session.test.ts \
+  src/electron/agent/__tests__/executor-chat-mode.test.ts \
+  src/electron/agent/__tests__/tool-policy-pipeline.test.ts \
   src/renderer/utils/__tests__/legal-demand-intake.test.ts \
   src/renderer/utils/__tests__/message-slash-options.test.ts \
+  src/renderer/components/__tests__/side-chat-panel.test.ts \
   src/renderer/components/__tests__/main-content-working-state.test.ts
 ```
 

@@ -292,6 +292,7 @@ All these are stored encrypted in the database:
 | `guardrails` | Safety limits and blocked patterns |
 | `hooks` | Automation hooks configuration |
 | `mcp` | MCP server configurations |
+| `secure-mcp-tunnels` | Secure MCP tunnel definitions and tunnel tokens |
 | `acp` | ACP-related persisted settings and lifecycle metadata |
 | `controlplane` | Control plane settings, tokens, allowed browser origins, and proxy trust settings |
 | `channels` | Channel/gateway configurations |
@@ -446,6 +447,17 @@ git diff HEAD..origin/main
 3. **Regularly audit** connected users
 4. **Revoke access** when no longer needed
 5. **For Signal**: Use a dedicated phone number (registration deactivates other Signal instances)
+
+### For Secure MCP Tunnels
+
+1. **Require relay admin auth** before creating tunnel credentials.
+2. **Use HTTPS/WSS** for non-loopback relays.
+3. **Prefer explicit tool allowlists** over broad access.
+4. **Enable read-only mode** for remote inspection workflows.
+5. **Rotate caller/client tokens** when a device or remote caller is decommissioned.
+6. **Review audit logs** for blocked or unexpected tool calls.
+
+See [Secure MCP Tunnels](secure-mcp-tunnels.md) for the tunnel-specific security model.
 
 ### For Development
 

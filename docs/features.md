@@ -47,7 +47,7 @@
 - **Runtime Orchestration**: SessionRuntime owns task-session state, session checklists, resume snapshots, recovery state, and task projection while the turn kernel handles each individual step, follow-up, or text turn; metadata-driven tool scheduling, graph-backed delegation, typed worker roles, verifier verdicts, semantic tool-batch summaries, and terminal-state reconciliation keep delegated work coherent across tasks, follow-ups, teams, and ACP runs.
 - **Prompt-Aware Tooling**: visible tools receive concise prompt-local guidance after policy filtering, and planning plus execution share the same render source for compact tool text and provider-facing tool descriptions.
 - **Composer Mentions**: type `@` in the main composer to choose Agents, configured Integrations, or Files. Integration mentions render as icon+name chips and add soft runtime routing guidance without changing permissions. See [Composer Mentions](composer-mentions.md).
-- **Message Box Shortcuts**: type `/` in the main composer to search deterministic app commands and skill-backed workflow shortcuts in one picker. App commands include `/schedule`, `/clear`, `/plan`, `/cost`, `/multitask`, `/compact`, `/doctor`, and `/undo`; `/schedule here ...` targets the selected thread for a scheduled follow-up. Plugin-pack aliases resolve to their target skills through the existing skills runtime. Skill-backed selections insert the command token so users can add context before sending. See [Message Box Shortcuts](message-box-shortcuts.md) and [Multitask Command](multitask.md).
+- **Message Box Shortcuts**: type `/` in the main composer to search deterministic app commands and skill-backed workflow shortcuts in one picker. App commands include `/side`, `/schedule`, `/clear`, `/plan`, `/cost`, `/multitask`, `/compact`, `/doctor`, and `/undo`; `/side ...` opens a read-only side conversation about the selected running session, and `/schedule here ...` targets the selected thread for a scheduled follow-up. Plugin-pack aliases resolve to their target skills through the existing skills runtime. Skill-backed selections insert the command token so users can add context before sending. See [Message Box Shortcuts](message-box-shortcuts.md), [Side Chat](side-chat.md), and [Multitask Command](multitask.md).
 - **Sectioned Prompt Stack**: execution and follow-up prompts are built from named session- and turn-scoped sections with explicit budgets, memoization of stable sections, provider-aware prompt caching, and truncation/drop reporting when token pressure rises.
 - **Provider-Aware Prompt Caching**: CoWork keeps stable system blocks cacheable and dynamic turn context uncached, prefers Anthropic automatic caching where supported, uses explicit Claude breakpoints on OpenRouter, and derives stable OpenAI-family cache keys for GPT routes.
 - **OpenRouter Pareto Code Routing**: OpenRouter model selection includes `openrouter/pareto-code` and `openrouter/pareto-code:nitro`. When selected, Settings exposes OpenRouter's optional Pareto minimum coding score as a decimal from `0` to `1` so coding tasks can route by capability tier without pinning one concrete model.
@@ -66,6 +66,7 @@
 </p>
 
 - **Chat Mode**: Direct LLM chat with no tools by default, no step timeline, same-session follow-ups, chat-only streaming for supported providers, and a fixed high output budget for explicit `executionMode: "chat"` sessions. Uploaded PDF turns that need deeper document reading are narrowly promoted into read-only analysis so the document parser can run. See [Chat Mode](chat-mode.md).
+- **Side Chat**: Right-side read-only questions about an active running session without steering or stopping the parent task. Side Chat uses a side-specific fork with hidden parent context, live parent-status snapshots for progress questions, a side-only visible transcript, and Markdown-rendered answers. See [Side Chat](side-chat.md).
 - **Document Creation**: Excel, Word, PDF, PowerPoint, HTML, and React-style outputs with professional formatting, first-class LaTeX/TikZ `.tex` -> PDF compilation when a system TeX engine is installed, plus the bundled [kami](skills/kami.md) workflow for editorial PDFs, resumes, one-pagers, and slide decks
 - **Document Artifact Workbench**: task-created Word-style files use compact artifact cards in the task feed. `.docx` opens directly into a resizable right-sidebar editor with a Google Docs-style toolbar, direct text editing, copy, save, external-open, and folder actions. `.doc`, `.rtf`, `.odt`, `.ott`, `.pages`, and related formats are recognized as document artifacts and use best-effort preview or external-app/folder actions depending on parser support. Fullscreen mode expands editable documents across the app and keeps a functional follow-up composer with the main task model picker, voice input, attachments, send behavior, latest-turn/working context, and automatic preview refresh after follow-up edits. See [Document Artifacts](document-artifacts.md).
 - **Format-Aware File Preview Popup**: clicking a file link in chat opens a single in-app preview modal that adapts its layout, header metadata, and per-format affordances to the file type. Supported formats: HTML (sandboxed iframe), Markdown, code with `highlight.js` syntax highlighting, plain text, JSON / JSONL / GeoJSON (collapsible tree with raw/tree toggle and parse-error fallback), CSV / TSV (RFC-4180 quoted-field parser feeding a sortable-style table), XLSX, DOCX, PDF (with page/native-text/OCR summary and inline document surface), images (with fit/actual-size toggle, dimension readout, and an alpha checkerboard for PNG/SVG/WebP/GIF/ICO), video, audio (mp3/wav/ogg/m4a/flac/aac with duration metadata), and LaTeX. Modal width and padding are driven by a single `data-format` attribute, so HTML/PDF/image/video get more horizontal room while text/code stay compact and audio renders narrow. The header shows a format-specific subtitle (e.g. `PNG · 1920×1080 · 240 KB`, `PDF · 12 pages · 1.4 MB`, `CSV · 412 rows · 24 KB`) and a unified action bar — Copy path (with copied flash), Show in Finder, Open externally, Close — plus contextual buttons such as the image fit toggle and the JSON tree/raw toggle. Theme tokens replace the previously hardcoded modal background and PDF summary colors, so the popup renders consistently in light and dark themes.
@@ -392,6 +393,20 @@ Chat mode is the direct assistant conversation surface. It is designed for norma
 - **History strategy**: long chat sessions use a summary-plus-recent-window prompt strategy with cached summary reuse
 
 See [Chat Mode](chat-mode.md) for the full behavior contract.
+
+### Side Chat
+
+Side Chat is the right-side companion conversation for an active running session. It is designed for inspection and clarification while the parent task continues.
+
+- **Launch from `/side`**: type `/side` or `/side <question>` in the main composer while a task is selected
+- **Side-only transcript**: the panel shows only side-chat questions and answers, not the cloned parent prompt or earlier parent answers
+- **Hidden parent context**: the side task can inherit read-only parent transcript/runtime context for answering questions without exposing copied events in the panel
+- **Fresh status answers**: status/progress questions receive a live parent-status snapshot for that turn, including current parent task state, active runtime state, timeline/checklist information, recent parent events, and result/error summaries when available
+- **Non-steering boundary**: side questions do not modify parent instructions, approve tools, cancel work, or change the active queue
+- **Read-only chat execution**: side tasks run with chat execution mode, shell access off, worktree creation off, autonomous mode off, and tools denied
+- **Markdown rendering**: side answers render Markdown, including inline code, lists, and fenced code blocks
+
+See [Side Chat](side-chat.md) for the user contract and implementation landmarks.
 
 When the agent is operating in plan-mode execution, it can also use `request_user_input` to pause for structured multiple-choice decisions. Responses are persisted locally and can be submitted from either the desktop UI or the Control Plane web dashboard. Normal execute-mode tasks default to safe assumptions plus concrete blocker reporting instead of broad clarification check-ins.
 
@@ -1411,6 +1426,7 @@ See [Remote Access](remote-access.md) for details.
 - **MCP Client**: Connect to external MCP servers
 - **MCP Host**: Expose CoWork's tools as an MCP server
 - **MCP Registry**: Browse and install servers from a catalog
+- **Secure MCP Tunnels**: Expose selected local/private MCP tools through an outbound-only CoWork relay you operate, with separate client/caller tokens, tool allowlists, read-only mode, and local audit logs. See [Secure MCP Tunnels](secure-mcp-tunnels.md).
 - **Versioned tool snapshots**: Tool discovery tracks a stable catalog hash across native tools and MCP state so status/tool changes invalidate caches immediately
 
 ---

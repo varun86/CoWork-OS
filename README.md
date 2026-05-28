@@ -23,12 +23,13 @@
   <a href="docs/getting-started.md">Getting Started</a> &middot;
   <a href="docs/composer-mentions.md">Composer Mentions</a> &middot;
   <a href="docs/message-box-shortcuts.md">Message Box Shortcuts</a> &middot;
+  <a href="docs/side-chat.md">Side Chat</a> &middot;
   <a href="docs/ask-inbox-architecture.md">Ask Inbox</a> &middot;
   <a href="docs/everything-workbench.md">Everything Workbench</a> &middot;
   <a href="docs/terminal-tabs.md">Terminal Tabs</a> &middot;
   <a href="docs/browser-workbench.md">Browser Workbench</a> &middot;
   <a href="docs/showcase.md">Use Cases</a> &middot;
-  <a href="docs/release-notes-0.5.45.md">Release Notes 0.5.45</a> &middot;
+  <a href="docs/release-notes-0.5.47.md">Release Notes 0.5.47</a> &middot;
   <a href="docs/integration-skill-bootstrap-lifecycle.md">Platform Updates</a> &middot;
   <a href="docs/">Documentation</a> &middot;
   <a href="CHANGELOG.md">Changelog</a> &middot;
@@ -42,45 +43,18 @@
 
 ### Why CoWork OS?
 
-- **AI Super App / Everything App** — CoWork OS is the one local-first app for everyday AI work: coding, email, research, web design, documents, spreadsheets, presentations, PDFs, channels, devices, automations, memory, providers, and approvals all live in one governed workspace.
-- **GUI-first agent management** — Create reusable agents, spawn parallel work, inspect delegated runs, assign tasks, review approvals, and monitor many agents from Agents Hub, Mission Control, task timelines, and visual boards instead of managing everything from a terminal.
-- **Everything Workbench** — Chat, tasks, documents, spreadsheets, presentations, web pages, PDFs, and file outputs live beside the agent. Generate an artifact, open it in CoWork, review or edit it, and ask for follow-up changes without defaulting to separate office apps. [Learn more](docs/everything-workbench.md)
-- **Real Terminal Tabs** — Open multiple xterm.js + node-pty terminals inside the workspace, with native macOS shell and Windows `cmd.exe` behavior, Tab completion, arrows, Ctrl+C, interactive CLI prompts, resizing, closeable tabs, and cwd-only prompts. This moves CoWork further toward one super app for coding, agents, artifacts, browser testing, inbox, automations, and direct terminal work. [Learn more](docs/terminal-tabs.md)
-- **Agents Hub** — Build reusable managed agents from prompts or templates, inspect their tools, skills, files, memory, channels, schedules, and approvals, then run tests or starter prompts as normal main-window tasks. The agent detail screen is configuration-first, not a separate sidebar chat. [Learn more](docs/managed-agents.md)
-- **Browser Workbench / Browser V2** — Test live websites and local apps in a visible in-app browser by default. The agent uses the same right-sidebar/fullscreen browser the user can see, with CDP-backed Browser V2 automation, responsive viewport testing through `browser_emulate`, accessibility snapshot refs, tabs, downloads/uploads, diagnostics, screenshots, annotation, and explicit opt-in for real signed-in Chrome/Edge control. [Learn more](docs/browser-workbench.md) · [Architecture](docs/browser-v2-architecture.md)
-- **Coding, web design, email, and knowledge work** — Use the same app for repository work, frontend/product design, inbox triage, research, docs, spreadsheets, presentations, web pages, PDFs, and long-running operational tasks.
-- **Inbox Agent** — local-first email workspace with Classic and Today modes, AI triage, an Ask Inbox sidebar with live mailbox-agent steps and hybrid evidence search, `@Inbox` main-composer routing, manual reply/reply-all/forward, editable AI drafts, sender cleanup, commitments, and background sync.
-- **Workflow Intelligence** — Always-on cognition is now framed as one reviewable loop: Memory is the source of truth, Heartbeat schedules reflection, Reflection evaluates evidence internally, Dreaming curates memory candidates in the background, and Suggestions are the user-facing output.
-- **Digital Twin Personas** — Pre-built opt-in persona presets for every role. Twins stay visible and activatable, but they no longer own heartbeat, workflow-intelligence, or memory runtime state.
-- **Zero-Human Company Ops** — Configure CoWork OS as a founder-directed autonomous company shell with venture workspace kits, automation-profile-backed operator agents, strategic planner loops, and Mission Control ops monitoring.
-- **Managed Devices** — Run and inspect tasks across saved remote machines from a dedicated Devices tab with connection controls, summaries, remote task feeds, and remote file attachment picking.
-- **Automations Control Center** — A single Automations section now separates Core Automation, Triggered Work, Remote/Device Work, and optional Twin surfaces instead of blending them into one runtime.
-- **35 LLM provider options** — 14 built-in providers plus 21 compatible/gateway options, including Claude, OpenAI, Google, Ollama, AWS Bedrock, OpenRouter, and Grok via xAI API key or SuperGrok browser OAuth. OpenRouter model selection includes Pareto Code and Pareto Code Nitro for coding-score-based routing. Bring your own keys, use supported subscriptions, or run local models.
-- **17 messaging channels** — WhatsApp, Telegram, Discord, Slack, Teams, Google Chat, Feishu/Lark, WeCom, iMessage, Signal, X, and more. Chat with your AI from anywhere, with per-channel, per-group, and per-topic specialization for workspace, agent role, guidance, and tool policy.
-- **44 MCP connectors** — Pre-built enterprise integrations across CRM, support, productivity, analytics, and payments, with native connector support for the most common internal surfaces.
-- **Composer @ mentions** — Type `@` in the message box to pick Agents, configured Integrations, or Files. Integration chips keep icon+name rendering in the prompt and task history while sending soft routing metadata to the runtime. [Learn more](docs/composer-mentions.md)
-- **35 bundled packs** — including Mobile Development, Game Development, finance packs, Claude-for-Legal practice packs, and the CoWork Shortcuts pack for message-box workflow aliases, with 100+ pack skills/shortcuts, in-app Plugin Store for installing community packs, remote registry, and enterprise admin policies for organization-wide control.
-- **150 built-in skills** — Documents, code review, web search, image generation, cloud integrations, game development, mobile development, financial analysis, infrastructure-as-code, React/Next.js performance guidance, and more, including bundled workflows such as `llm-wiki` for persistent research vaults, `manim-video` for programmatic technical animation, `kami` for editorial PDFs and slide decks, `react-best-practices` for React workspace changes, and `taste-skill` for high-agency frontend design.
-- **Profiles & portability** — run separate CoWork profiles with isolated app data, export/import complete profile bundles, and keep credentials, channels, skills, and sessions separated by profile.
-- **Active Context sidebar** — Always-visible panel showing 44 available MCP connectors with branded Lucide icons and enabled skills, auto-refreshed every 30 seconds.
-- **Agent teams** — Multi-agent collaboration with shared checklists, graph-backed runs, collaborative mode, `/multitask` lane fan-out, multi-LLM synthesis, persistent teams, and ACP-targeted delegation for local or remote specialists.
-- **External agent orchestration** — Discover ACP agents, delegate work to A2A-compatible remote endpoints, and keep remote calls under the same approval and policy model as other governed actions, with persisted ACP tasks, restart-safe resume, remote cancel support, and the shared orchestration graph as the runtime backbone.
-- **Think With Me mode** — Socratic brainstorming that helps you clarify thinking without executing actions.
-- **Chat mode** — Direct LLM chat with no tools by default, no step timeline, same-session follow-ups, chat-only streaming for supported providers, and a narrow read-only analysis exception for uploaded PDFs that need deeper document reading.
-- **Build Mode** — Go from idea to working prototype with a phased canvas workflow (Concept → Plan → Scaffold → Iterate) and named checkpoints.
-- **AI Playbook** — Auto-captures what worked from successful tasks and injects relevant patterns into future prompts. Repeated patterns auto-promote to governed, one-click-approvable skills via the Playbook-to-Skill pipeline.
-- **Evolving Intelligence** — The layered memory runtime keeps curated hot memory prompt-visible by default, leaves archive recall off by default, and adds explicit `search_sessions` / `memory_topics_load` recall paths for recent runs and topical packs. Adaptive Style Engine learns your communication preferences from message patterns and feedback. Evolution Metrics dashboard quantifies improvement over time (correction rate, knowledge growth, style alignment).
-- **Operator Runtime Visibility** — Task completion now shows what Cowork learned, semantic batch labels and follow-up completions stay visible, unified recall spans tasks/messages/files, persistent shell sessions preserve operator state, and model routing/fallback is visible in the UI and Mission Control.
-- **Chronicle (Desktop Research Preview)** — Opt-in local recent-screen context for vague prompts like “what is this?”, “why is this failing?”, or “sync the latest draft”, with consent-gated passive capture, pause/resume controls, promoted `screen_context` evidence in Mission Control, and optional linked background memory generation. **Documentation:** [docs/chronicle.md](docs/chronicle.md).
-- **Configurable fallback chains** — LLM and web-search providers can run in an explicit ordered fallback chain, including Exa for search, immediate failover on retryable provider errors, provider/model-level failover visibility in the UI, and a configurable cooldown before retrying the primary LLM route.
-- **Provider-aware prompt caching** — Prompt caching is on by default for supported routes. CoWork keeps stable system sections cacheable, keeps volatile turn context out of the cached prefix, uses Anthropic automatic caching when available, falls back to explicit Claude breakpoints on OpenRouter, and derives stable OpenAI-family cache keys for GPT routes such as Azure `gpt-5.4` / `gpt-5.4-mini`.
-- **Usage Insights** — Dashboard showing task stats, cost/token tracking by model, activity heatmaps, top skills, per-pack analytics, per-persona success/retry metrics, and task-result satisfaction signals.
-- **ChatGPT History Import** — Import your full ChatGPT conversation history. CoWork OS instantly knows your preferences, past projects, and context — no cold start. All data stays encrypted on your machine and never leaves it.
-- **Computer use (macOS)** — Native desktop control via `screenshot`, `click`, `type_text`, `keypress`, and related tools with helper-targeted Accessibility + Screen Recording permissions, single-session sequential execution, **Esc** to abort, screenshot-relative coordinates, and stale-`captureId` protection. Prefer browser and shell tools for web and repo work; computer use is routed as a last-resort lane in policy and planning guidance. **Documentation:** [docs/computer-use.md](docs/computer-use.md).
-- **Security-first** — Approval workflows, sandboxed execution, configurable guardrails, encrypted storage, and a verified suite of 4,932 automated tests across 390 test files.
-- **Structured guidance** — In plan-mode flows, the agent can pause with short multiple-choice prompts instead of ambiguous free-text follow-ups.
-- **Runtime resilience** — Main interactive tasks run without an implicit turn window, while explicit turn caps, lifetime safety fuses, context-overflow recovery, and safe path normalization keep long-running work moving without silent file drift.
-- **Local-first & BYOK** — Your data and API keys stay on your machine. No telemetry. No middleman.
+- **Local AI super app** — CoWork OS keeps coding, email, research, browser testing, documents, spreadsheets, presentations, PDFs, channels, devices, automations, memory, providers, and approvals in one governed local workspace.
+- **GUI-first agent operations** — Agents Hub, Mission Control, task timelines, visual boards, teams, devices, and automations let you create reusable agents, assign work, inspect delegated runs, review approvals, and monitor many agents without reducing the product to a terminal.
+- **Long-running agent runtime** — Chat, Execute, Plan, Analyze, Verified, Think With Me, Collaborative, Multi-LLM, `/multitask`, structured input cards, Side Chat, adaptive recovery, and visible routing/fallback state make agent work inspectable while it is running. [Chat mode](docs/chat-mode.md) · [Side Chat](docs/side-chat.md) · [Multitask](docs/multitask.md)
+- **Everything Workbench** — Generated documents, spreadsheets, decks, web pages, PDFs, previews, and file outputs open beside the agent with follow-up context, so everyday knowledge work can be created and revised inside CoWork. [Learn more](docs/everything-workbench.md)
+- **Developer workbench** — Real xterm.js + node-pty terminal tabs, title-bar terminal/browser toggles, Browser Workbench, responsive Browser V2 automation, screenshots, diagnostics, and visible web testing keep repo work, CLI work, and live app QA in the same workspace. [Terminal Tabs](docs/terminal-tabs.md) · [Browser Workbench](docs/browser-workbench.md)
+- **Inbox and channels** — Inbox Agent handles local-first mail triage, Ask Inbox evidence search, drafts, send/reply/forward, commitments, and `@Inbox` routing, while the gateway supports 17 messaging channels with specialization by workspace, agent role, guidance, and tool policy. [Inbox Agent](docs/inbox-agent.md) · [Channels](docs/channels.md)
+- **Automation and memory loop** — Workflow Intelligence, Heartbeat, Reflection, Dreaming, Suggestions, AI Playbook, Chronicle, Knowledge Graph, durable runtime context, and Usage Insights form a reviewable learning loop instead of an invisible background process. [Workflow Intelligence](docs/workflow-intelligence.md) · [Chronicle](docs/chronicle.md)
+- **Integrations, providers, and skills** — 35 LLM provider options, configurable fallback chains, provider-aware prompt caching, 44 MCP connectors, 36 bundled packs, 147 built-in skills, Composer `@` mentions, message-box `/` shortcuts, Plugin Store, Skill Store, and external skill directories make the app extensible without giving up local control. [Providers](docs/providers.md) · [Plugin Packs](docs/plugin-packs.md)
+- **Ops and portability** — Zero-Human Company Ops, Digital Twin personas, managed devices, remote access, profiles, profile import/export, and best-fit workflow packs support both personal work and founder/operator-style autonomous company loops.
+- **Local-first security** — Your data and API keys stay on your machine. Approval workflows, sandboxed execution, configurable guardrails, encrypted storage, session-scoped location prompts, private-memory filtering, and a verified automated test suite keep high-agency work bounded and reviewable.
+
+Recent high-impact additions change the day-to-day product shape: real terminal tabs, visible Browser Workbench, Side Chat, message-box shortcuts, Everything Workbench artifacts, and the 0.5.47 long-session stability/location work. Detailed feature inventory remains below for deeper evaluation.
 
 ### Ideas & Media
 
@@ -108,7 +82,9 @@ See [Everyday Agent](docs/everyday-agent.md), [Workflow Intelligence](docs/workf
 
 ### Latest Release
 
-**`0.5.45`** adds Agent Builder, finance and legal workflow packs, channel specialization, Google Workspace Tasks/Slides support, mailbox compose/send upgrades, runtime network/sandbox policy controls, Dreaming memory curation, and `/multitask` lane fan-out. Start with [Release Notes 0.5.45](docs/release-notes-0.5.45.md), then [Managed Agents](docs/managed-agents.md), [Claude-for-Legal Workflows](docs/claude-for-legal.md), [Multitask Command](docs/multitask.md), [Dreaming](docs/dreaming.md), [Features](docs/features.md), [Getting Started](docs/getting-started.md), and the [Changelog](CHANGELOG.md).
+**`0.5.47`** is the current package version. It focuses on longer-session reliability, multi-agent and multi-task renderer stability, off-main-thread memory recall, memory-pressure cleanup, safer location approvals, Maps MCP workflows, private-memory filtering, and unsigned macOS packaging guidance. Start with [Release Notes 0.5.47](docs/release-notes-0.5.47.md), then [Features](docs/features.md), [Getting Started](docs/getting-started.md), and the [Changelog](CHANGELOG.md).
+
+The larger recent feature expansion landed in `0.5.45`: Agent Builder, finance/legal packs, channel specialization, Google Workspace Tasks/Slides, mailbox compose/send upgrades, runtime network/sandbox policy controls, Dreaming memory curation, and `/multitask` lane fan-out. See [Release Notes 0.5.45](docs/release-notes-0.5.45.md), [Managed Agents](docs/managed-agents.md), [Claude-for-Legal Workflows](docs/claude-for-legal.md), [Multitask Command](docs/multitask.md), and [Dreaming](docs/dreaming.md).
 
 ## Quick Start
 
@@ -185,7 +161,8 @@ See the [Development Guide](docs/development.md) for prerequisites and details.
 2. **Create a task or start from Ideas** — Describe what you want ("create a weekly plan", "create a quarterly report spreadsheet", "draft a DOCX memo", "build a small landing page") or begin from a curated Ideas prompt. No workspace needed — a private starter workspace is used automatically if you don't select one.
 3. **Choose a mode** — Pick **Chat**, **Execute**, **Plan**, **Analyze**, or **Verified** for the runtime behavior, then optionally toggle **Autonomous** (auto-approve actions), **Collaborative** (multi-agent perspectives), or **Multi-LLM** (compare providers with a judge) per task. For one-shot parallel lane work, start with `/multitask [N] <task>`.
 4. **Monitor execution** — Watch the real-time task timeline as the agent plans, executes, and produces artifacts. Parallel tool bursts are grouped into lane summaries, shell commands stay visible, and the workspace can open real terminal tabs for direct interactive CLI work.
-5. **Respond when needed** — Destructive operations require explicit approval (unless Autonomous mode is on), and plan-mode tasks can pause for structured multiple-choice input before continuing.
+5. **Ask without interrupting** — Use `/side` to open Side Chat for read-only questions about the selected running session, or use the title-bar terminal and browser buttons when you need direct CLI or web inspection beside the task.
+6. **Respond when needed** — Destructive operations require explicit approval (unless Autonomous mode is on), plan-mode tasks can pause for structured multiple-choice input, and location requests stay explicit and session-scoped.
 
 <p align="center">
   <img src="resources/branding/images/cowork-os-4.webp" alt="Running task monitor" width="700">
@@ -201,6 +178,8 @@ Task-based execution with dynamic re-planning, five runtime modes (Chat, Execute
 Skills now follow an additive runtime model: CoWork can proactively shortlist or apply a relevant skill, but the original task remains canonical. Skills add context and scoped execution modifiers instead of replacing the task prompt. [Learn more](docs/skills-runtime-model.md)
 
 Real terminal tabs now sit beside the task runtime: xterm.js renders the terminal, node-pty owns the OS pseudoterminal, macOS uses the user's login shell, and Windows uses `cmd.exe` through ConPTY/winpty. This makes CoWork a stronger everyday developer workbench because repository work, agent execution, approvals, browser testing, and direct CLI sessions no longer require switching to a separate terminal app. [Learn more](docs/terminal-tabs.md)
+
+Side Chat gives active sessions a read-only inspection lane. `/side [question]` opens a right-side conversation about the selected running task with hidden inherited parent context, a fresh parent-status snapshot for progress questions, a side-only visible transcript, and mutating tools denied. [Learn more](docs/side-chat.md)
 
 <p align="center">
   <img src="resources/branding/images/cowork-os-3.webp" alt="Agents Hub" width="700">
@@ -263,6 +242,22 @@ Long-running tasks now have clearer operator handoffs and stronger recovery defa
 - **Context overflow retry**: context-capacity failures trigger compaction and retry instead of immediate hard failure when the model context window is exceeded
 - **Path repair**: `/workspace/...` aliases and drifted relative paths can be normalized back into the active workspace or pinned task root, with strict-fail policies available when you want hard enforcement
 - **Parallel timeline lanes**: read-only tool batches render as grouped timeline rows so the UI stays readable even when searches/fetches run concurrently
+
+### Feature Inventory
+
+The top of this README is intentionally opinionated about what matters first. The broader surface area is still part of CoWork OS:
+
+| Area | Current coverage |
+|------|------------------|
+| **Agent runtime** | Chat, Execute, Plan, Analyze, Verified, Think With Me, Autonomous, Collaborative, Multi-LLM, `/multitask`, structured input cards, Side Chat, dynamic re-planning, workflow pipelines, agent comparison, performance reviews, shell-session continuity, completion/resume coherence, and runtime recovery |
+| **Agent operations** | Agents Hub, reusable managed agents, managed sessions, agent teams, Mission Control, visual boards, global queue visibility, task pinning, task wrap-up, sub-task navigation, external ACP/A2A delegation, restart-safe ACP tasks, remote cancel, and graph-backed orchestration |
+| **Developer workbench** | Repository work, real PTY terminal tabs, title-bar terminal/browser toggles, shell tools, git worktree isolation, Browser Workbench, Browser V2 automation, responsive viewport QA, diagnostics, screenshots, annotation, web page previews, Live Canvas, Build Mode, React/Next.js guidance, and high-agency frontend design |
+| **Knowledge work artifacts** | Editable document artifacts, spreadsheet artifacts, presentation artifacts, web page artifacts, paired LaTeX/PDF outputs, smart PDF attachments, format-aware file preview, designed editorial documents, generated images, generated videos, and programmatic Manim technical videos |
+| **Inbox and communications** | Inbox Agent, Classic and Today inbox modes, Ask Inbox, hybrid mailbox search, editable AI drafts, manual reply/reply-all/forward, sender cleanup, commitments, Gmail forwarding automations, `@Inbox` routing, voice mode, outbound calls, and 17 messaging channels |
+| **Automation and memory** | Routines, scheduled tasks, webhooks, event triggers, Workflow Intelligence, Heartbeat, Reflection, Dreaming, Suggestions, AI Playbook, adaptive style learning, Usage Insights, persistent memory, Knowledge Graph, ChatGPT history import, durable runtime context, context compaction, Supermemory, and Chronicle |
+| **Integrations and extensibility** | 35 LLM provider options, ordered LLM/search fallback chains, provider-aware prompt caching, 44 MCP connectors, native Google Workspace coverage, 36 bundled plugin packs, 338 pack skills, 263 pack shortcuts, 42 pack agent roles, 147 built-in skills, Plugin Store, Skill Store, external skill directories, and MCP client/host/registry support |
+| **Operations and deployment** | Profiles, profile import/export, Devices, remote workspaces, remote task dispatch, remote file picking, Control Plane, Linux server package, self-hosting, Tailscale/SSH remote access, Zero-Human Company Ops, Digital Twin personas, company-linked operator agents, and best-fit Support/IT/Sales workflow packs |
+| **Safety and reliability** | Approval workflows, sandboxed execution, workspace/profile permission rules, network/sandbox policy controls, private-memory filtering, session-scoped location approvals, command/path containment, import scanning and quarantine, encrypted storage, local-first data handling, renderer event caps, off-main-thread memory recall, and long-session cleanup |
 
 ### Mission Control
 
@@ -352,6 +347,10 @@ Local-first inbox workspace that turns email into an action queue while preservi
   <br><em>Inbox Agent combines mailbox triage, thread evidence, drafts, and next actions.</em>
 </p>
 
+### Desktop Location & Maps
+
+Location-aware work is available when explicitly approved for the current session. CoWork can use native desktop location helpers on macOS, Windows, and Linux, fall back to IP-based location when configured, and pass coordinates into Maps MCP tools for geocoding, reverse geocoding, route estimates, and nearby-place search. Location permission cannot be auto-approved or persisted, so local errands, travel planning, route comparisons, and nearby search remain deliberate user-approved actions. [Learn more](docs/features.md#desktop-location)
+
 ### Infrastructure
 
 Built-in cloud infrastructure tools — no external processes or MCP servers needed. The agent can spin up sandboxes, register domains, and make payments natively.
@@ -410,7 +409,7 @@ Health pulls personal signals into a private, action-oriented view for readiness
 
 ### Plugin Platform & Customize
 
-Unified plugin platform with 35 bundled packs (Engineering, DevOps, Product, Sales, QA, Finance, Claude-for-Legal practice packs, CoWork Shortcuts, and more), each bundling skills, agent roles, connectors, slash command aliases, and "Try asking" prompts. Packs can link to Digital Twin personas as optional role presets.
+Unified plugin platform with 36 bundled packs (Engineering, DevOps, Product, Sales, QA, Finance, Claude-for-Legal practice packs, CoWork Shortcuts, and more), each bundling skills, agent roles, connectors, slash command aliases, and "Try asking" prompts. Packs can link to Digital Twin personas as optional role presets.
 
 - **Search & filter**: Real-time sidebar search across pack names, descriptions, categories, and skill names
 - **Per-skill control**: Enable or disable individual skills within a pack without toggling the whole pack
@@ -441,9 +440,9 @@ These are the workflows where approval gates, local data control, and measurable
 
 ### Extensibility
 
-- **150 built-in skills** across developer, productivity, communication, documents, frontend, game development, mobile development, financial analysis, infrastructure-as-code, and more
+- **147 built-in skills** across developer, productivity, communication, documents, frontend, game development, mobile development, financial analysis, infrastructure-as-code, and more
 - **Custom skills** in `~/Library/Application Support/cowork-os/skills/` (macOS) or `%APPDATA%\cowork-os\skills\` (Windows)
-- **35 bundled plugin packs** with 100+ pack skills/shortcuts, message-box slash aliases, Claude-for-Legal workflow cards, and Digital Twin integration where applicable
+- **36 bundled plugin packs** with 338 pack skills, 263 pack shortcuts, 42 pack agent roles, message-box slash aliases, Claude-for-Legal workflow cards, and Digital Twin integration where applicable
 - **Plugin Store** — browse, install from Git/URL, scaffold custom packs, and review quarantine/report state for imported packs
 - **Skill Store** — browse CoWork Registry skills, search ClawHub, import external skills from Git, raw JSON, or raw `SKILL.md`, and review quarantine/report state for imported skills
 - **MCP support** — client, host, and registry
@@ -485,7 +484,7 @@ Every tracked file follows a shared parser/linter model with freshness windows, 
                               ↕
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Execution Layer                               │
-│  File Ops │ Skills │ Browser │ LLM Providers (30+) │ MCP        │
+│  File Ops │ Skills │ Browser │ LLM Providers (35) │ MCP         │
 │  Infrastructure (E2B Sandboxes │ Domains │ Wallet │ x402)       │
 └─────────────────────────────────────────────────────────────────┘
                               ↕
@@ -512,7 +511,7 @@ See [Architecture](docs/architecture.md) for the full technical deep-dive.
 - **Sandbox isolation**: macOS `sandbox-exec` (native), Docker containers, or process-level isolation on Windows
 - **Managed deployment hardening**: Headless Control Plane access is loopback-first and blocks unsafe public binds unless Tailscale, private container context, or an explicit break-glass override is configured
 - **Encrypted storage**: OS keychain + AES-256 fallback
-- **4,932 automated tests** in the suite across **390 test files** (`4,854 passed`, `78 skipped`), including **135+** security unit tests under `tests/security/` and **250+** control-plane and WebSocket protocol tests
+- **6,286 declared Vitest cases** across **589 tracked test files**, including **142** security cases under `tests/security/` and **405** control-plane/WebSocket-related cases
 
 See [Security Guide](docs/security-guide.md) and [Security Architecture](docs/security/) for details.
 
@@ -544,10 +543,12 @@ See [CHANGELOG.md](CHANGELOG.md) for the full history of completed features.
 | [Release Notes 0.5.47](docs/release-notes-0.5.47.md) | What is new in the latest release |
 | [Composer Mentions](docs/composer-mentions.md) | `@` autocomplete for agents, configured integrations, files, rich integration chips, and `@Inbox` routing |
 | [Message Box Shortcuts](docs/message-box-shortcuts.md) | `/` picker for deterministic app commands and skill-backed workflow shortcuts |
+| [Side Chat](docs/side-chat.md) | Right-side read-only questions about an active running session without steering or stopping the parent task |
 | [Claude-for-Legal Workflows](docs/claude-for-legal.md) | Bundled legal practice slash commands, editable picker selection, and main-view matter intake cards |
 | [Multitask Command](docs/multitask.md) | `/multitask [N] <task>` lane fan-out through collaborative team runs |
 | [Use Case Showcase](docs/showcase.md) | Comprehensive guide to what you can build and automate |
 | [Features](docs/features.md) | Complete feature reference |
+| [Desktop Location & Maps](docs/features.md#desktop-location) | Explicitly approved desktop location, geocoding, routes, and nearby-place workflows |
 | [Everything Workbench](docs/everything-workbench.md) | Unified in-app artifact model for docs, sheets, decks, web pages, PDFs, and live browser sessions |
 | [Browser Workbench](docs/browser-workbench.md) | Visible in-app browser for website testing, responsive viewport QA, screenshots, annotation, diagnostics, and Browser V2 automation |
 | [Browser V2 Architecture](docs/browser-v2-architecture.md) | Unified browser session manager, adapters, snapshot refs, diagnostics, safety, and verification contract |
@@ -575,6 +576,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the full history of completed features.
 | [Heartbeat v3](docs/heartbeat-v3.md) | Default two-lane heartbeat architecture, signals, Pulse, Dispatch, and automation-profile-backed operator semantics |
 | [Security Guide](docs/security-guide.md) | Security model and best practices |
 | [Enterprise Connectors](docs/enterprise-connectors.md) | MCP connector development |
+| [Secure MCP Tunnels](docs/secure-mcp-tunnels.md) | Self-hosted outbound-only private MCP access, relay setup, policy controls, and audit logs |
 | [Self-Hosting](docs/self-hosting.md) | Docker and systemd deployment |
 | [VPS/Linux](docs/vps-linux.md) | Headless server deployment |
 | [Remote Access](docs/remote-access.md) | Tailscale, SSH tunnels, WebSocket API |

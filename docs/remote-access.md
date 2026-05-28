@@ -20,6 +20,8 @@ The Control Plane WebSocket server binds to `127.0.0.1:18789` by default for sec
 | **Tailscale Serve** | Private network access (Tailnet only) | Medium |
 | **Tailscale Funnel** | Public internet access | Medium |
 
+For private MCP tool access, use [Secure MCP Tunnels](secure-mcp-tunnels.md) instead of exposing a local MCP port. Secure MCP Tunnels open an outbound WebSocket from the local CoWork app to a relay you operate and forward only authenticated MCP JSON-RPC requests.
+
 When the server is running, it also serves a minimal web dashboard at `/` (same host/port).
 This is useful for headless/VPS setups: open the URL in a browser (via tunnel/Tailscale), paste the token, and manage tasks, approvals, and pending structured input requests.
 It also includes basic workspace, channel, and account management so you can bring up a fresh VPS without a desktop UI.
