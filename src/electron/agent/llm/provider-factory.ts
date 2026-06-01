@@ -38,7 +38,9 @@ import { DeepSeekProvider } from "./deepseek-provider";
 import { PiProvider } from "./pi-provider";
 import { AnthropicCompatibleProvider } from "./anthropic-compatible-provider";
 import { OpenAICompatibleProvider } from "./openai-compatible-provider";
+import { OpenCodeGoProvider } from "./opencode-go-provider";
 import { GitHubCopilotProvider } from "./github-copilot-provider";
+import { isOpenCodeGoBaseUrl } from "./opencode-go-routing";
 import { SecureSettingsRepository } from "../../database/SecureSettingsRepository";
 import {
   CUSTOM_PROVIDER_CATALOG,
@@ -505,6 +507,16 @@ function createCustomProvider(
     throw new Error(
       `${entry.name} model is required. Configure it in Settings.`,
     );
+  }
+
+  if (resolvedType === "opencode" && isOpenCodeGoBaseUrl(baseUrl)) {
+    return new OpenCodeGoProvider({
+      type: resolvedType,
+      providerName: entry.name,
+      apiKey,
+      baseUrl,
+      defaultModel: model,
+    });
   }
 
   if (entry.compatibility === "openai") {
@@ -2257,15 +2269,21 @@ export class LLMProviderFactory {
       case "pi":
         provider = new PiProvider(config);
         break;
-      case "openai-compatible":
-        provider = new OpenAICompatibleProvider({
+      case "openai-compatible": {
+        const baseUrl =
+          config.openaiCompatibleBaseUrl || "http://localhost:1234/v1";
+        const ProviderClass = isOpenCodeGoBaseUrl(baseUrl)
+          ? OpenCodeGoProvider
+          : OpenAICompatibleProvider;
+        provider = new ProviderClass({
           type: "openai-compatible",
           providerName: "OpenAI-Compatible",
           apiKey: config.openaiCompatibleApiKey || "",
-          baseUrl: config.openaiCompatibleBaseUrl || "http://localhost:1234/v1",
+          baseUrl,
           defaultModel: config.model,
         });
         break;
+      }
       default:
         throw new Error(`Unknown provider type: ${config.type}`);
     }

@@ -17,6 +17,10 @@ import {
   isPromptCacheAutoUnsupportedError,
   normalizeSystemBlocks,
 } from "./prompt-cache";
+import {
+  isOpenCodeGoBaseUrl,
+  normalizeOpenCodeGoModelId,
+} from "./opencode-go-routing";
 
 const ANTHROPIC_VERSION = "2023-06-01";
 
@@ -101,9 +105,22 @@ export class AnthropicCompatibleProvider implements LLMProvider {
     this.managedPromptCacheSupported = !isNanoGptBaseUrl(options.baseUrl);
   }
 
+  private normalizeModelForEndpoint(model: string): string {
+    const trimmed = model.trim();
+    if (
+      isOpenCodeGoBaseUrl(this.baseUrl) &&
+      trimmed.toLowerCase().startsWith("opencode-go/")
+    ) {
+      return normalizeOpenCodeGoModelId(trimmed);
+    }
+    return trimmed;
+  }
+
   async createMessage(request: LLMRequest): Promise<LLMResponse> {
     const tools = request.tools ? this.convertTools(request.tools) : undefined;
-    const model = request.model || this.defaultModel;
+    const model = this.normalizeModelForEndpoint(
+      request.model || this.defaultModel,
+    );
     const normalizedMessages = assertNormalizedTurnTranscript(
       request.messages,
       (message) => console.warn(`[${this.providerName}] ${message}`),
@@ -142,6 +159,7 @@ export class AnthropicCompatibleProvider implements LLMProvider {
 
   async testConnection(): Promise<{ success: boolean; error?: string }> {
     try {
+      const model = this.normalizeModelForEndpoint(this.defaultModel);
       const response = await fetch(this.messagesUrl, {
         method: "POST",
         headers: {
@@ -155,7 +173,7 @@ export class AnthropicCompatibleProvider implements LLMProvider {
             : {}),
         },
         body: JSON.stringify({
-          model: this.defaultModel,
+          model,
           max_tokens: 10,
           messages: [{ role: "user", content: "Hi" }],
         }),

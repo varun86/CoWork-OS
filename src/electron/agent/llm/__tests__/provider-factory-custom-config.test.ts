@@ -344,6 +344,211 @@ describe("LLMProviderFactory custom provider config resolution", () => {
     );
   });
 
+  it("routes OpenCode Go Qwen 3.7 Max through the Anthropic Messages API", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ type: "text", text: "ok" }],
+        stop_reason: "end_turn",
+      }),
+    } as Response);
+
+    const provider = LLMProviderFactory.createProviderFromConfig({
+      type: "opencode",
+      model: "opencode-go/qwen3.7-max",
+      providerApiKey: "opencode-go-key",
+      providerBaseUrl: "https://opencode.ai/zen/go/v1/chat/completions",
+    } as Any);
+
+    await expect(
+      provider.createMessage({
+        model: "opencode-go/qwen3.7-max",
+        system: "Use tools when useful.",
+        maxTokens: 4096,
+        messages: [{ role: "user", content: "Hello" }],
+      }),
+    ).resolves.toMatchObject({
+      content: [{ type: "text", text: "ok" }],
+      stopReason: "end_turn",
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://opencode.ai/zen/go/v1/messages",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "anthropic-version": "2023-06-01",
+          "x-api-key": "opencode-go-key",
+          Authorization: "Bearer opencode-go-key",
+        }),
+      }),
+    );
+
+    const body = JSON.parse(
+      String(fetchSpy.mock.calls[0]?.[1]?.body || "{}"),
+    );
+    expect(body).toMatchObject({
+      model: "qwen3.7-max",
+      max_tokens: 4096,
+      system: "Use tools when useful.",
+      messages: [{ role: "user", content: "Hello" }],
+    });
+    expect(body.max_completion_tokens).toBeUndefined();
+  });
+
+  it("routes bare OpenCode Go Qwen 3.7 Max connection tests through the Anthropic Messages API", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ type: "text", text: "ok" }],
+        stop_reason: "end_turn",
+      }),
+    } as Response);
+
+    const provider = LLMProviderFactory.createProviderFromConfig({
+      type: "opencode",
+      model: "qwen3.7-max",
+      providerApiKey: "opencode-go-key",
+      providerBaseUrl: "https://opencode.ai/zen/go/v1/chat/completions",
+    } as Any);
+
+    await expect(provider.testConnection()).resolves.toEqual({
+      success: true,
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://opencode.ai/zen/go/v1/messages",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "x-api-key": "opencode-go-key",
+        }),
+      }),
+    );
+
+    const body = JSON.parse(
+      String(fetchSpy.mock.calls[0]?.[1]?.body || "{}"),
+    );
+    expect(body).toMatchObject({
+      model: "qwen3.7-max",
+      max_tokens: 10,
+      messages: [{ role: "user", content: "Hi" }],
+    });
+  });
+
+  it("routes generic OpenAI-compatible OpenCode Go Qwen 3.7 Max through Anthropic Messages", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ type: "text", text: "ok" }],
+        stop_reason: "end_turn",
+      }),
+    } as Response);
+
+    const provider = LLMProviderFactory.createProviderFromConfig({
+      type: "openai-compatible",
+      model: "opencode-go/qwen3.7-max",
+      openaiCompatibleApiKey: "opencode-go-key",
+      openaiCompatibleBaseUrl: "https://opencode.ai/zen/go/v1/chat/completions",
+    } as Any);
+
+    await expect(
+      provider.createMessage({
+        model: "opencode-go/qwen3.7-max",
+        system: "Use tools when useful.",
+        maxTokens: 4096,
+        messages: [{ role: "user", content: "Hello" }],
+      }),
+    ).resolves.toMatchObject({
+      content: [{ type: "text", text: "ok" }],
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://opencode.ai/zen/go/v1/messages",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "x-api-key": "opencode-go-key",
+        }),
+      }),
+    );
+  });
+
+  it("routes OpenCode Go request model overrides through the matching API surface", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
+      }),
+    } as Response);
+
+    const kimiDefaultProvider = LLMProviderFactory.createProviderFromConfig({
+      type: "opencode",
+      model: "opencode-go/kimi-k2.6",
+      providerApiKey: "opencode-go-key",
+      providerBaseUrl: "https://opencode.ai/zen/go/v1/chat/completions",
+    } as Any);
+
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        content: [{ type: "text", text: "ok" }],
+        stop_reason: "end_turn",
+      }),
+    } as Response);
+
+    await expect(
+      kimiDefaultProvider.createMessage({
+        model: "opencode-go/qwen3.7-max",
+        system: "Use tools when useful.",
+        maxTokens: 4096,
+        messages: [{ role: "user", content: "Hello" }],
+      }),
+    ).resolves.toMatchObject({
+      content: [{ type: "text", text: "ok" }],
+    });
+
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe(
+      "https://opencode.ai/zen/go/v1/messages",
+    );
+    expect(
+      JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body || "{}")),
+    ).toMatchObject({ model: "qwen3.7-max" });
+
+    fetchSpy.mockClear();
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
+      }),
+    } as Response);
+
+    const qwenDefaultProvider = LLMProviderFactory.createProviderFromConfig({
+      type: "opencode",
+      model: "opencode-go/qwen3.7-max",
+      providerApiKey: "opencode-go-key",
+      providerBaseUrl: "https://opencode.ai/zen/go/v1/chat/completions",
+    } as Any);
+
+    await expect(
+      qwenDefaultProvider.createMessage({
+        model: "opencode-go/kimi-k2.6",
+        system: "Use tools when useful.",
+        maxTokens: 4096,
+        messages: [{ role: "user", content: "Hello" }],
+      }),
+    ).resolves.toMatchObject({
+      content: [{ type: "text", text: "ok" }],
+    });
+
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe(
+      "https://opencode.ai/zen/go/v1/chat/completions",
+    );
+    expect(
+      JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body || "{}")),
+    ).toMatchObject({ model: "kimi-k2.6" });
+  });
+
   it("adapts OpenCode Go Kimi tool turns to the raw chat completions API", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,

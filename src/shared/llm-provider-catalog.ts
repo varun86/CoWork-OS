@@ -26,7 +26,8 @@ export const CUSTOM_PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     apiKeyLabel: "API Key / Token",
     apiKeyPlaceholder: "Enter token",
     requiresBaseUrl: true,
-    description: "OpenAI-compatible endpoint required.",
+    description:
+      "OpenCode endpoint required. OpenCode Go uses model-specific API surfaces.",
   },
   {
     id: "google-vertex",
