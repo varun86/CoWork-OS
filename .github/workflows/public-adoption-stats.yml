@@ -34,14 +34,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          if git diff --quiet -- data/adoption docs/public-adoption-stats.md; then
+          if git diff --quiet -- data/adoption docs/public-adoption-stats.md README.md; then
             echo "No adoption stats changes to commit."
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/adoption docs/public-adoption-stats.md
+          git add data/adoption docs/public-adoption-stats.md README.md
           git commit -m "chore: update public adoption stats"
           git push
 
@@ -53,4 +53,5 @@ jobs:
           path: |
             data/adoption/public-stats-latest.json
             docs/public-adoption-stats.md
+            README.md
           if-no-files-found: warn

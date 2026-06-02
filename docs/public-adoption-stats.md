@@ -1,6 +1,6 @@
 # Public Adoption Stats
 
-Generated at: 2026-06-02T13:22:46.088Z
+Generated at: 2026-06-02T13:29:24.199Z
 
 These numbers are acquisition and download-intent signals for CoWork OS. They do **not** measure active users, first launch, successful task completion, model configuration, retention, prompts, files, emails, or any in-app content.
 
