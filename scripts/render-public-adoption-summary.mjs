@@ -4,6 +4,9 @@ import path from "path";
 const repoRoot = process.cwd();
 const latestPath = path.join(repoRoot, "data", "adoption", "public-stats-latest.json");
 const outputPath = path.join(repoRoot, "docs", "public-adoption-stats.md");
+const readmePath = path.join(repoRoot, "README.md");
+const readmeStatsStart = "<!-- COWORK_PUBLIC_ADOPTION_STATS_START -->";
+const readmeStatsEnd = "<!-- COWORK_PUBLIC_ADOPTION_STATS_END -->";
 
 function formatNumber(value) {
   if (value == null || Number.isNaN(Number(value))) return "n/a";
@@ -22,6 +25,14 @@ function markdownEscape(value) {
     .replaceAll("\\", "\\\\")
     .replaceAll("|", "\\|")
     .replaceAll("\n", " ");
+}
+
+function htmlEscape(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 function renderTrafficMetric(metric, totalKey, uniquesKey) {
@@ -95,6 +106,79 @@ function renderPlatformTotals(platformTotals, platformDeltas) {
   ].join("\n");
 }
 
+function renderReadmeStatsBlock({ stats, repo, releases, traffic, npm, npmDownloads, releaseDownloadDeltas }) {
+  const releaseDelta =
+    releaseDownloadDeltas.totalDeltaSincePreviousSnapshot == null
+      ? "n/a"
+      : releaseDownloadDeltas.totalDeltaSincePreviousSnapshot >= 0
+        ? `+${formatNumber(releaseDownloadDeltas.totalDeltaSincePreviousSnapshot)}`
+        : formatNumber(releaseDownloadDeltas.totalDeltaSincePreviousSnapshot);
+
+  const rows = [
+    ["GitHub stars", formatNumber(repo.stars)],
+    ["GitHub forks", formatNumber(repo.forks)],
+    ["Installer/server downloads", formatNumber(releases.totalInstallAssetDownloadCount)],
+    ["Download delta", releaseDelta],
+    ["npm downloads, last week", formatNumber(npmDownloads.lastWeek?.downloads)],
+    ["GitHub views, last 14-ish days", renderTrafficMetric(traffic.views, "count", "uniques")],
+    ["GitHub clones, last 14-ish days", renderTrafficMetric(traffic.clones, "count", "uniques")],
+  ];
+
+return `${readmeStatsStart}
+<div align="center">
+
+<h3>Public Adoption Signals</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th align="center">Signal</th>
+      <th align="center">Current</th>
+    </tr>
+  </thead>
+  <tbody>
+${rows
+  .map(
+    ([label, value]) => `    <tr>
+      <td align="left">${htmlEscape(label)}</td>
+      <td align="center">${htmlEscape(value)}</td>
+    </tr>`,
+  )
+  .join("\n")}
+  </tbody>
+</table>
+
+<p><sub>Generated ${htmlEscape(
+    stats.generatedAt,
+  )}. These are public GitHub/npm adoption signals, not active-user or in-app telemetry numbers. <a href="docs/public-adoption-stats.md">Full report</a>.</sub></p>
+
+</div>
+${readmeStatsEnd}`;
+}
+
+async function updateReadmeStats(block) {
+  let readme = await fs.readFile(readmePath, "utf8");
+  const startIndex = readme.indexOf(readmeStatsStart);
+  const endIndex = readme.indexOf(readmeStatsEnd);
+
+  if (startIndex >= 0 && endIndex > startIndex) {
+    const before = readme.slice(0, startIndex).trimEnd();
+    const after = readme.slice(endIndex + readmeStatsEnd.length).trimStart();
+    readme = `${before}\n\n${block}\n\n${after}`;
+  } else {
+    const heroImageMarker = '<p align="center">\n  <img src="resources/branding/images/cowork-os-1.webp"';
+    const insertIndex = readme.indexOf(heroImageMarker);
+    if (insertIndex < 0) {
+      throw new Error("Could not locate README insertion point for public adoption stats block.");
+    }
+    const before = readme.slice(0, insertIndex).trimEnd();
+    const after = readme.slice(insertIndex).trimStart();
+    readme = `${before}\n\n${block}\n\n${after}`;
+  }
+
+  await fs.writeFile(readmePath, readme, "utf8");
+}
+
 async function main() {
   const stats = JSON.parse(await fs.readFile(latestPath, "utf8"));
   const repo = stats.github?.repo || {};
@@ -158,6 +242,18 @@ For website implementation work, consume \`data/adoption/public-stats-latest.jso
 
   await fs.writeFile(outputPath, markdown, "utf8");
   console.log(`[adoption-stats] Wrote ${path.relative(repoRoot, outputPath)}.`);
+
+  const readmeBlock = renderReadmeStatsBlock({
+    stats,
+    repo,
+    releases,
+    traffic,
+    npm,
+    npmDownloads,
+    releaseDownloadDeltas,
+  });
+  await updateReadmeStats(readmeBlock);
+  console.log(`[adoption-stats] Wrote ${path.relative(repoRoot, readmePath)} stats block.`);
 }
 
 main().catch((error) => {
