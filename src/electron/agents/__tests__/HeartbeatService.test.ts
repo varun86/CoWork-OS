@@ -6,6 +6,7 @@ import type {
   AgentRole,
   AgentMention,
   Activity,
+  CreateAutomationRunOutcomeInput,
   HeartbeatEvent,
   ProactiveSuggestion,
   Task,
@@ -26,6 +27,7 @@ let taskUpdates: Array<{ taskId: string; updates: Partial<Task> }>;
 let createdSuggestions: ProactiveSuggestion[];
 let recordedActivities: Array<Record<string, unknown>>;
 let heartbeatEvents: HeartbeatEvent[];
+let automationOutcomes: CreateAutomationRunOutcomeInput[];
 let tmpDir: string;
 let workspacePaths: Map<string, string>;
 let services: HeartbeatService[];
@@ -161,6 +163,9 @@ function createService(overrides?: Partial<HeartbeatServiceDeps>): HeartbeatServ
       return created;
     },
     addNotification: async () => undefined,
+    recordAutomationOutcome: async (outcome) => {
+      automationOutcomes.push(outcome);
+    },
     ...overrides,
   };
 
@@ -182,6 +187,7 @@ describe("HeartbeatService v3", () => {
     createdSuggestions = [];
     recordedActivities = [];
     heartbeatEvents = [];
+    automationOutcomes = [];
     services = [];
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cowork-heartbeat-v3-"));
     process.env.COWORK_USER_DATA_DIR = path.join(tmpDir, "user-data");
@@ -268,6 +274,13 @@ describe("HeartbeatService v3", () => {
     expect(createdTasks[0]?.heartbeatRunId).toBeTruthy();
     expect(taskUpdates).toHaveLength(1);
     expect(taskUpdates[0]?.updates.heartbeatRunId).toBeTruthy();
+    expect(automationOutcomes).toContainEqual(
+      expect.objectContaining({
+        usefulness: "actionable",
+        title: "Agent agent-1 started background work",
+        taskId: createdTasks[0]?.id,
+      }),
+    );
   });
 
   it("replays one immediate manual pulse after an in-flight pulse finishes", async () => {
@@ -508,6 +521,12 @@ describe("HeartbeatService v3", () => {
 
     const failed = await service.triggerHeartbeat("agent-1");
     expect(failed.status).toBe("error");
+    expect(automationOutcomes).toContainEqual(
+      expect.objectContaining({
+        usefulness: "failed",
+        title: "Agent agent-1 heartbeat failed",
+      }),
+    );
 
     service.submitHeartbeatSignal({
       agentRoleId: "agent-1",

@@ -1399,6 +1399,36 @@ export class DatabaseManager {
       CREATE INDEX IF NOT EXISTS idx_mission_control_evidence_item
         ON mission_control_item_evidence(item_id, timestamp DESC);
 
+      CREATE TABLE IF NOT EXISTS automation_run_outcomes (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        source_run_id TEXT,
+        task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+        workspace_id TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
+        company_id TEXT REFERENCES companies(id) ON DELETE SET NULL,
+        agent_role_id TEXT REFERENCES agent_roles(id) ON DELETE SET NULL,
+        title TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        usefulness TEXT NOT NULL,
+        trigger TEXT NOT NULL,
+        notification_recommended INTEGER NOT NULL DEFAULT 0,
+        notification_reason TEXT,
+        notification_delivered_at INTEGER,
+        next_action TEXT,
+        metrics_json TEXT,
+        evidence_refs_json TEXT,
+        created_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_automation_outcomes_created
+        ON automation_run_outcomes(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_automation_outcomes_company
+        ON automation_run_outcomes(company_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_automation_outcomes_workspace
+        ON automation_run_outcomes(workspace_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_automation_outcomes_usefulness
+        ON automation_run_outcomes(usefulness, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS company_package_sources (
         id TEXT PRIMARY KEY,
         company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,

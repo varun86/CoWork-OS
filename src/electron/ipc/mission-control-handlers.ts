@@ -59,6 +59,7 @@ import { CoreHarnessExperimentService } from "../core/CoreHarnessExperimentServi
 import { CoreHarnessExperimentRunner } from "../core/CoreHarnessExperimentRunner";
 import { CoreLearningsService } from "../core/CoreLearningsService";
 import { MissionControlIntelligenceService } from "../mission-control/MissionControlIntelligenceService";
+import { AutomationRunOutcomeRepository } from "../automation/AutomationRunOutcomeRepository";
 import {
   AutomationProfileAttachRequestSchema,
   AutomationProfileCreateRequestSchema,
@@ -249,6 +250,7 @@ export function setupMissionControlHandlers(deps: MissionControlDeps): void {
   const coreMemoryCandidateRepo = new CoreMemoryCandidateRepository(db);
   const coreMemoryDistillRunRepo = new CoreMemoryDistillRunRepository(db);
   const missionControlIntelligence = new MissionControlIntelligenceService(db);
+  const automationOutcomeRepo = new AutomationRunOutcomeRepository(db);
   const agentCompanies = new AgentCompaniesService(db, core, agentRoleRepo);
   const taskRepo = new TaskRepository(db);
   const activityRepo = new ActivityRepository(db);
@@ -926,6 +928,8 @@ export function setupMissionControlHandlers(deps: MissionControlDeps): void {
     const issues = core.listIssues({ companyId: validated, limit: 5000 });
     const runs = core.listRuns({ companyId: validated, limit: 100 });
     const plannerRuns = requirePlannerService().listRuns({ companyId: validated, limit: 8 });
+    const automationOutcomes = automationOutcomeRepo.list({ companyId: validated, limit: 12 });
+    const automationOutcomeSummary = automationOutcomeRepo.summarize({ companyId: validated });
     const operators = agentRoleRepo.findByCompanyId(validated, false);
     const activityWorkspaceId = company.defaultWorkspaceId;
     const activities = activityWorkspaceId
@@ -1125,6 +1129,8 @@ export function setupMissionControlHandlers(deps: MissionControlDeps): void {
       reviewQueue: reviewQueue.slice(0, 20),
       executionMap,
       plannerRuns,
+      automationOutcomes,
+      automationOutcomeSummary,
     };
 
     return summary;

@@ -17,6 +17,7 @@ import {
   type AwarenessSummary,
   type AutonomyDecision,
   type ChiefOfStaffWorldModel,
+  type CreateAutomationRunOutcomeInput,
   type MemoryFeaturesSettings,
 } from "../../shared/types";
 import { AgentRoleRepository } from "./AgentRoleRepository";
@@ -39,6 +40,10 @@ import { CoreTraceService } from "../core/CoreTraceService";
 import { CoreMemoryCandidateService } from "../core/CoreMemoryCandidateService";
 import { CoreMemoryDistiller } from "../core/CoreMemoryDistiller";
 import { CoreLearningPipelineService } from "../core/CoreLearningPipelineService";
+import {
+  classifyHeartbeatDispatchOutcome,
+  classifyHeartbeatErrorOutcome,
+} from "../automation/automation-outcome-classifier";
 
 type HeartbeatWakeMode = "now" | "next-heartbeat";
 type HeartbeatWakeSource = "hook" | "cron" | "api" | "manual";
@@ -126,10 +131,14 @@ export interface HeartbeatServiceDeps {
     title: string;
     message: string;
     workspaceId?: string;
+    taskId?: string;
     suggestionId?: string;
     recommendedDelivery?: "briefing" | "inbox" | "nudge";
     companionStyle?: "email" | "note";
   }) => Promise<void>;
+  recordAutomationOutcome?: (
+    outcome: CreateAutomationRunOutcomeInput,
+  ) => Promise<unknown>;
   runWorkflowReflection?: (params: {
     workspaceId?: string;
     reason: string;
@@ -918,6 +927,14 @@ export class HeartbeatService extends EventEmitter {
           runType: "dispatch",
           dispatchKind: decision.dispatchKind,
         });
+        await this.recordDispatchOutcome({
+          agent,
+          workspaceId,
+          sourceRunId: dispatchRun.id,
+          trigger: manualOverride ? "manual" : "heartbeat",
+          decision,
+          dispatchResult,
+        });
         this.emitHeartbeatEvent({
           type: "pulse_completed",
           agentRoleId: agent.id,
@@ -963,6 +980,13 @@ export class HeartbeatService extends EventEmitter {
         runId: pulseRun.id,
         runType: "pulse",
       });
+      await this.recordHeartbeatError(
+        agent,
+        pulseRun.id,
+        manualOverride ? "manual" : "heartbeat",
+        message,
+        workspaceId,
+      );
       return result;
       } finally {
       this.running.delete(agent.id);
@@ -994,6 +1018,58 @@ export class HeartbeatService extends EventEmitter {
       lastPulseResult: result.pulseOutcome,
     });
     this.timers.delete(agent.id);
+  }
+
+  private async recordDispatchOutcome(params: {
+    agent: AgentRole;
+    workspaceId: string;
+    sourceRunId: string;
+    trigger: "manual" | "heartbeat";
+    decision: HeartbeatPulseDecision;
+    dispatchResult: HeartbeatResult;
+  }): Promise<void> {
+    try {
+      await this.deps.recordAutomationOutcome?.(
+        classifyHeartbeatDispatchOutcome({
+          agent: params.agent,
+          workspaceId: params.workspaceId,
+          sourceRunId: params.sourceRunId,
+          trigger: params.trigger,
+          reason: params.decision.reason,
+          dispatchKind: params.decision.dispatchKind,
+          result: params.dispatchResult,
+          evidenceRefs: params.decision.evidenceRefs.map((id) => ({
+            type: "heartbeat_evidence",
+            id,
+            label: id,
+          })),
+        }),
+      );
+    } catch (error) {
+      console.warn("[HeartbeatService] Failed to record dispatch outcome:", error);
+    }
+  }
+
+  private async recordHeartbeatError(
+    agent: AgentRole,
+    runId: string,
+    trigger: "manual" | "heartbeat",
+    message: string,
+    workspaceId?: string,
+  ): Promise<void> {
+    try {
+      await this.deps.recordAutomationOutcome?.(
+        classifyHeartbeatErrorOutcome({
+          agent,
+          workspaceId,
+          sourceRunId: runId,
+          trigger,
+          error: message,
+        }),
+      );
+    } catch (error) {
+      console.warn("[HeartbeatService] Failed to record heartbeat error outcome:", error);
+    }
   }
 
   private async maybeRunWorkflowReflection(params: {

@@ -10474,6 +10474,95 @@ export interface NotificationStoreFile {
   notifications: AppNotification[];
 }
 
+// ============ Automation Outcome Types ============
+
+export type AutomationRunSource =
+  | "heartbeat"
+  | "strategic_planner"
+  | "cron"
+  | "daily_plan"
+  | "subconscious"
+  | "memory_dreaming";
+
+export type AutomationRunUsefulness =
+  | "actionable"
+  | "informational"
+  | "low_value"
+  | "failed";
+
+export type AutomationRunTrigger =
+  | "startup"
+  | "schedule"
+  | "manual"
+  | "heartbeat"
+  | "hook"
+  | "cron"
+  | "api";
+
+export interface AutomationRunEvidenceRef {
+  type: string;
+  id?: string;
+  label: string;
+}
+
+export interface AutomationRunOutcomeMetrics {
+  changedIssueCount?: number;
+  createdIssueCount?: number;
+  updatedIssueCount?: number;
+  dispatchedTaskCount?: number;
+  checkedSurfaceCount?: number;
+  failedCheckCount?: number;
+  suppressedOutputCount?: number;
+  [key: string]: unknown;
+}
+
+export interface AutomationRunOutcome {
+  id: string;
+  source: AutomationRunSource;
+  sourceRunId?: string;
+  taskId?: string;
+  workspaceId?: string;
+  companyId?: string;
+  agentRoleId?: string;
+  title: string;
+  summary: string;
+  usefulness: AutomationRunUsefulness;
+  trigger: AutomationRunTrigger;
+  metrics?: AutomationRunOutcomeMetrics;
+  evidenceRefs?: AutomationRunEvidenceRef[];
+  nextAction?: string;
+  notificationRecommended: boolean;
+  notificationReason?: string;
+  notificationDeliveredAt?: number;
+  createdAt: number;
+}
+
+export type CreateAutomationRunOutcomeInput = Omit<
+  AutomationRunOutcome,
+  "id" | "createdAt" | "notificationDeliveredAt"
+> & {
+  id?: string;
+  createdAt?: number;
+  notificationDeliveredAt?: number;
+};
+
+export interface AutomationRunOutcomeListRequest {
+  source?: AutomationRunSource;
+  usefulness?: AutomationRunUsefulness;
+  workspaceId?: string;
+  companyId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AutomationRunOutcomeSummary {
+  total: number;
+  actionable: number;
+  informational: number;
+  lowValue: number;
+  failed: number;
+}
+
 // ============ Hooks (Webhooks & Gmail Pub/Sub) Types ============
 
 export interface HooksSettingsData {
@@ -13194,6 +13283,8 @@ export interface CompanyCommandCenterSummary {
   reviewQueue: CompanyReviewQueueItem[];
   executionMap: CompanyExecutionMapItem[];
   plannerRuns: StrategicPlannerRun[];
+  automationOutcomes: AutomationRunOutcome[];
+  automationOutcomeSummary: AutomationRunOutcomeSummary;
 }
 
 export type MissionControlCategory =

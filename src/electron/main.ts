@@ -54,6 +54,8 @@ import { CrossSignalService } from "./agents/CrossSignalService";
 import { FeedbackService } from "./agents/FeedbackService";
 import { LoreService } from "./agents/LoreService";
 import { AutomationProfileRepository } from "./agents/AutomationProfileRepository";
+import { AutomationRunOutcomeRepository } from "./automation/AutomationRunOutcomeRepository";
+import { AutomationOutcomeService } from "./automation/AutomationOutcomeService";
 import { ProactiveSuggestionsService } from "./agent/ProactiveSuggestionsService";
 import { AgentDaemon } from "./agent/daemon";
 import { CoreMemoryCandidateRepository } from "./core/CoreMemoryCandidateRepository";
@@ -258,6 +260,7 @@ let loreService: LoreService | null = null;
 let xMentionBridgeService: XMentionBridgeService | null = null;
 let strategicPlannerService: StrategicPlannerService | null = null;
 let symphonyService: SymphonyService | null = null;
+let automationOutcomeService: AutomationOutcomeService | null = null;
 let eventTriggerService: EventTriggerService | null = null;
 let routineService: RoutineService | null = null;
 let coreTraceService: CoreTraceService | null = null;
@@ -1536,6 +1539,13 @@ if (!gotTheLock) {
     // Initialize database first - required for SecureSettingsRepository
     const coreInitStartedAt = Date.now();
     dbManager = new DatabaseManager();
+    automationOutcomeService = new AutomationOutcomeService({
+      repo: new AutomationRunOutcomeRepository(dbManager.getDatabase()),
+      notify: async (params) => {
+        const notificationService = getNotificationService();
+        await notificationService?.add(params);
+      },
+    });
     const usageInsightsProjector = UsageInsightsProjector.initialize(
       dbManager.getDatabase(),
     );
@@ -2838,6 +2848,8 @@ if (!gotTheLock) {
         coreMemoryCandidateService: coreMemoryCandidateService || undefined,
         coreMemoryDistiller: coreMemoryDistiller || undefined,
         coreLearningPipelineService: coreLearningPipelineService || undefined,
+        recordAutomationOutcome: async (outcome) =>
+          automationOutcomeService?.record(outcome),
       };
 
       heartbeatService = new HeartbeatService(heartbeatDeps);
@@ -3028,6 +3040,8 @@ if (!gotTheLock) {
         db: dbManager.getDatabase(),
         agentDaemon,
         log: (...args) => logger.info(...args),
+        recordAutomationOutcome: async (outcome) =>
+          automationOutcomeService?.record(outcome),
       });
       setStrategicPlannerService(strategicPlannerService);
       strategicPlannerService.start();

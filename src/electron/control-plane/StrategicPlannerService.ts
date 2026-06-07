@@ -12,6 +12,7 @@ import type {
   StrategicPlannerConfigUpdate,
   StrategicPlannerRun,
   StrategicPlannerRunRequest,
+  CreateAutomationRunOutcomeInput,
 } from "../../shared/types";
 import type { AgentDaemon } from "../agent/daemon";
 import { TaskRepository, WorkspaceRepository } from "../database/repositories";
@@ -22,6 +23,10 @@ import {
   resolveOperationalAutonomyPolicy,
 } from "../agents/autonomy-policy";
 import { isTempWorkspaceId } from "../../shared/types";
+import {
+  classifyStrategicPlannerFailure,
+  classifyStrategicPlannerOutcome,
+} from "../automation/automation-outcome-classifier";
 
 const DEFAULT_INTERVAL_MINUTES = 180;
 const DEFAULT_MAX_ISSUES_PER_RUN = 4;
@@ -59,6 +64,9 @@ interface StrategicPlannerServiceDeps {
   db: Database.Database;
   agentDaemon?: AgentDaemon;
   log?: (...args: unknown[]) => void;
+  recordAutomationOutcome?: (
+    outcome: CreateAutomationRunOutcomeInput,
+  ) => Promise<unknown>;
 }
 
 export class StrategicPlannerService {
@@ -304,7 +312,15 @@ export class StrategicPlannerService {
           runId,
         );
       this.recordSuccessfulRunConfigUpdate(request.companyId, Date.now());
-      return this.getRunOrThrow(runId);
+      const completedRun = this.getRunOrThrow(runId);
+      await this.recordAutomatedRunOutcome({
+        company,
+        config,
+        trigger,
+        run: completedRun,
+        outcome,
+      });
+      return completedRun;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.deps.db
@@ -316,10 +332,68 @@ export class StrategicPlannerService {
           `,
         )
         .run(message, Date.now(), Date.now(), runId);
+      await this.recordAutomatedRunFailure(company, config, trigger, message);
       throw error;
     } finally {
       this.activeRuns.delete(request.companyId);
     }
+  }
+
+  private async recordAutomatedRunOutcome(params: {
+    company: Company;
+    config: StrategicPlannerConfig;
+    trigger: string;
+    run: StrategicPlannerRun;
+    outcome: {
+      createdIssueIds: string[];
+      updatedIssueIds: string[];
+      dispatchedTaskIds: string[];
+      suppressedOutputs: Array<{ seedTitle: string; summary: string; outputType: CompanyOutputType }>;
+    };
+  }): Promise<void> {
+    if (!this.deps.recordAutomationOutcome) return;
+    const { company, config, run, outcome } = params;
+    try {
+      await this.deps.recordAutomationOutcome(
+        classifyStrategicPlannerOutcome({
+          company,
+          configWorkspaceId: config.planningWorkspaceId,
+          trigger: this.normalizeTrigger(params.trigger),
+          run,
+          createdIssueIds: outcome.createdIssueIds,
+          updatedIssueIds: outcome.updatedIssueIds,
+          dispatchedTaskIds: outcome.dispatchedTaskIds,
+          suppressedOutputCount: outcome.suppressedOutputs.length,
+        }),
+      );
+    } catch (error) {
+      this.log("Failed to record automated planner outcome", error);
+    }
+  }
+
+  private async recordAutomatedRunFailure(
+    company: Company,
+    config: StrategicPlannerConfig,
+    trigger: string,
+    message: string,
+  ): Promise<void> {
+    if (!this.deps.recordAutomationOutcome) return;
+    try {
+      await this.deps.recordAutomationOutcome(
+        classifyStrategicPlannerFailure({
+          company,
+          configWorkspaceId: config.planningWorkspaceId,
+          trigger: this.normalizeTrigger(trigger),
+          error: message,
+        }),
+      );
+    } catch (error) {
+      this.log("Failed to record automated planner failure outcome", error);
+    }
+  }
+
+  private normalizeTrigger(trigger: string): StrategicPlannerRun["trigger"] {
+    return trigger === "schedule" || trigger === "startup" ? trigger : "manual";
   }
 
   private async tick(): Promise<void> {

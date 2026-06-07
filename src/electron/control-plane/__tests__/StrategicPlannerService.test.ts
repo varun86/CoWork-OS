@@ -132,6 +132,38 @@ describeWithSqlite("StrategicPlannerService", () => {
     ).toBe(true);
   });
 
+  it("records an actionable outcome when an automated planner run creates work", async () => {
+    const outcomes: Any[] = [];
+    planner = new (await import("../StrategicPlannerService")).StrategicPlannerService({
+      db,
+      recordAutomationOutcome: async (outcome) => {
+        outcomes.push(outcome);
+      },
+    });
+    const company = core.getDefaultCompany();
+    core.createProject({
+      companyId: company.id,
+      name: "Lifecycle Signals",
+    });
+
+    planner.updateConfig(company.id, {
+      enabled: true,
+      maxIssuesPerRun: 2,
+      autoDispatch: false,
+    });
+
+    const run = await planner.runNow({ companyId: company.id, trigger: "schedule" });
+
+    expect(run.status).toBe("completed");
+    expect(outcomes).toContainEqual(
+      expect.objectContaining({
+        usefulness: "actionable",
+        notificationRecommended: true,
+        title: `${company.name} planner found background work`,
+      }),
+    );
+  });
+
   it("uses the company default workspace instead of creating workspace-link issues", async () => {
     const company = core.createCompany({
       name: "Planner Workspace Co",
