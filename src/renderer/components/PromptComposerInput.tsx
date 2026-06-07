@@ -48,9 +48,56 @@ type PromptComposerInputProps = {
 
 type RenderPart =
   | { type: "text"; key: string; text: string }
-  | { type: "mention"; key: string; span: IntegrationMentionSpan };
+  | { type: "mention"; key: string; span: IntegrationMentionSpan }
+  | { type: "link"; key: string; span: ComposerLinkSpan };
+
+type ComposerLinkSpan = {
+  start: number;
+  end: number;
+  markdown: string;
+  url: string;
+  label: string;
+  domain: string;
+};
 
 const canonicalMentionText = (mention: IntegrationMentionSelection): string => `@${mention.label}`;
+const markdownLinkPattern = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/gi;
+
+function parseWebUrl(text: string): URL | null {
+  try {
+    const url = new URL(text);
+    return url.protocol === "http:" || url.protocol === "https:" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatComposerLinkLabel(url: URL): string {
+  const host = url.hostname.replace(/^www\./i, "");
+  const pathParts = url.pathname
+    .split("/")
+    .filter(Boolean)
+    .map((part) => decodeURIComponent(part));
+
+  if (host === "github.com" && pathParts.length >= 2) {
+    return `${pathParts[0]}/${pathParts[1].replace(/\.git$/i, "")}`;
+  }
+
+  const path = pathParts.slice(0, 2).join("/");
+  return path ? `${host}/${path}` : host;
+}
+
+export function formatPastedWebLinkAsMarkdown(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed || /\s/.test(trimmed)) return null;
+  const url = parseWebUrl(trimmed);
+  if (!url) return null;
+  return `[${formatComposerLinkLabel(url)}](${url.toString()})`;
+}
+
+function getFaviconUrl(domain: string): string {
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`;
+}
 
 function sortedValidMentions(value: string, mentions: IntegrationMentionSpan[]): IntegrationMentionSpan[] {
   return mentions
@@ -61,16 +108,62 @@ function sortedValidMentions(value: string, mentions: IntegrationMentionSpan[]):
     .sort((a, b) => a.start - b.start);
 }
 
+function parseMarkdownLinks(value: string, mentions: IntegrationMentionSpan[]): ComposerLinkSpan[] {
+  const mentionRanges = sortedValidMentions(value, mentions);
+  const links: ComposerLinkSpan[] = [];
+  markdownLinkPattern.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = markdownLinkPattern.exec(value))) {
+    const markdown = match[0];
+    const label = match[1]?.trim();
+    const urlText = match[2];
+    const start = match.index;
+    const end = start + markdown.length;
+    if (!label || !urlText) continue;
+    if (mentionRanges.some((span) => span.start < end && span.end > start)) continue;
+    const url = parseWebUrl(urlText);
+    if (!url) continue;
+    links.push({
+      start,
+      end,
+      markdown,
+      url: url.toString(),
+      label,
+      domain: url.hostname.replace(/^www\./i, ""),
+    });
+  }
+  return links;
+}
+
 function buildRenderParts(value: string, mentions: IntegrationMentionSpan[]): RenderPart[] {
   const parts: RenderPart[] = [];
   let cursor = 0;
-  for (const span of sortedValidMentions(value, mentions)) {
-    if (span.start < cursor) continue;
-    if (span.start > cursor) {
-      parts.push({ type: "text", key: `text:${cursor}:${span.start}`, text: value.slice(cursor, span.start) });
+  const tokens = [
+    ...sortedValidMentions(value, mentions).map((span) => ({
+      type: "mention" as const,
+      start: span.start,
+      end: span.end,
+      span,
+    })),
+    ...parseMarkdownLinks(value, mentions).map((span) => ({
+      type: "link" as const,
+      start: span.start,
+      end: span.end,
+      span,
+    })),
+  ].sort((a, b) => a.start - b.start || b.end - a.end);
+
+  for (const token of tokens) {
+    if (token.start < cursor) continue;
+    if (token.start > cursor) {
+      parts.push({ type: "text", key: `text:${cursor}:${token.start}`, text: value.slice(cursor, token.start) });
     }
-    parts.push({ type: "mention", key: span.spanId, span });
-    cursor = span.end;
+    if (token.type === "mention") {
+      parts.push({ type: "mention", key: token.span.spanId, span: token.span });
+    } else {
+      parts.push({ type: "link", key: `link:${token.start}:${token.end}`, span: token.span });
+    }
+    cursor = token.end;
   }
   if (cursor < value.length) {
     parts.push({ type: "text", key: `text:${cursor}:end`, text: value.slice(cursor) });
@@ -78,11 +171,11 @@ function buildRenderParts(value: string, mentions: IntegrationMentionSpan[]): Re
   return parts;
 }
 
-function getMentionElement(node: Node | null): HTMLElement | null {
+function getTokenElement(node: Node | null): HTMLElement | null {
   let current: HTMLElement | null =
     node instanceof HTMLElement ? node : node?.parentElement ?? null;
   while (current) {
-    if (current.dataset.integrationMentionId) return current;
+    if (current.dataset.integrationMentionId || current.dataset.composerLinkText) return current;
     current = current.parentElement;
   }
   return null;
@@ -92,6 +185,9 @@ function textLengthForNode(node: Node, mentionsById: Map<string, IntegrationMent
   if (node instanceof HTMLElement && node.dataset.integrationMentionId) {
     const span = mentionsById.get(node.dataset.integrationMentionId);
     return span ? canonicalMentionText(span.mention).length : 0;
+  }
+  if (node instanceof HTMLElement && node.dataset.composerLinkText) {
+    return node.dataset.composerLinkText.length;
   }
   if (node.nodeType === Node.TEXT_NODE) {
     return node.textContent?.length ?? 0;
@@ -111,12 +207,12 @@ function getIndexForDomPosition(
 ): number {
   if (!targetNode || !root.contains(targetNode)) return textLengthForNode(root, mentionsById);
 
-  const mentionEl = getMentionElement(targetNode);
-  if (mentionEl) {
+  const tokenEl = getTokenElement(targetNode);
+  if (tokenEl) {
     let index = 0;
     const children = Array.from(root.childNodes);
     for (const child of children) {
-      if (child === mentionEl || child.contains(mentionEl)) {
+      if (child === tokenEl || child.contains(tokenEl)) {
         return index + (targetOffset > 0 ? textLengthForNode(child, mentionsById) : 0);
       }
       index += textLengthForNode(child, mentionsById);
@@ -128,6 +224,10 @@ function getIndexForDomPosition(
   const visit = (node: Node): void => {
     if (found) return;
     if (node instanceof HTMLElement && node.dataset.integrationMentionId) {
+      index += textLengthForNode(node, mentionsById);
+      return;
+    }
+    if (node instanceof HTMLElement && node.dataset.composerLinkText) {
       index += textLengthForNode(node, mentionsById);
       return;
     }
@@ -169,6 +269,15 @@ function findDomPosition(
 
   const visit = (node: Node): { node: Node; offset: number } | null => {
     if (node instanceof HTMLElement && node.dataset.integrationMentionId) {
+      const length = textLengthForNode(node, mentionsById);
+      if (target <= seen) return { node: node.parentNode || root, offset: childOffset(node) };
+      if (target <= seen + length) {
+        return { node: node.parentNode || root, offset: childOffset(node) + 1 };
+      }
+      seen += length;
+      return null;
+    }
+    if (node instanceof HTMLElement && node.dataset.composerLinkText) {
       const length = textLengthForNode(node, mentionsById);
       if (target <= seen) return { node: node.parentNode || root, offset: childOffset(node) };
       if (target <= seen + length) {
@@ -237,6 +346,10 @@ function readEditable(
       mentions.push({ ...original, start, end: value.length });
       return;
     }
+    if (node instanceof HTMLElement && node.dataset.composerLinkText) {
+      value += node.dataset.composerLinkText;
+      return;
+    }
     if (node.nodeType === Node.TEXT_NODE) {
       value += node.textContent ?? "";
       return;
@@ -271,6 +384,28 @@ function renderComposerDom(root: HTMLElement, parts: RenderPart[]): void {
   for (const part of parts) {
     if (part.type === "text") {
       fragment.appendChild(document.createTextNode(part.text));
+      continue;
+    }
+
+    if (part.type === "link") {
+      const chip = document.createElement("span");
+      chip.className = "composer-link-chip";
+      chip.contentEditable = "false";
+      chip.dataset.composerLinkText = part.span.markdown;
+      chip.title = part.span.url;
+
+      const icon = document.createElement("img");
+      icon.className = "composer-link-favicon";
+      icon.src = getFaviconUrl(part.span.domain);
+      icon.alt = "";
+      icon.draggable = false;
+
+      const label = document.createElement("span");
+      label.className = "composer-link-label";
+      label.textContent = part.span.label;
+
+      chip.append(icon, label);
+      fragment.appendChild(chip);
       continue;
     }
 
@@ -376,15 +511,19 @@ export const PromptComposerInput = forwardRef<PromptComposerInputHandle, PromptC
 
     const applyTextReplacement = useCallback(
       (start: number, end: number, replacement: string) => {
+        const protectedSpans = [
+          ...validMentions,
+          ...parseMarkdownLinks(value, validMentions),
+        ];
         const expandedStart = Math.min(
           start,
-          ...validMentions
+          ...protectedSpans
             .filter((span) => span.start < end && span.end > start)
             .map((span) => span.start),
         );
         const expandedEnd = Math.max(
           end,
-          ...validMentions
+          ...protectedSpans
             .filter((span) => span.start < end && span.end > start)
             .map((span) => span.end),
         );
@@ -535,7 +674,7 @@ export const PromptComposerInput = forwardRef<PromptComposerInputHandle, PromptC
       if (!text) return;
       event.preventDefault();
       const range = getSelectionRange();
-      applyTextReplacement(range.start, range.end, text);
+      applyTextReplacement(range.start, range.end, formatPastedWebLinkAsMarkdown(text) || text);
     };
 
     const handleCopy = (event: ReactClipboardEvent<HTMLDivElement>) => {
@@ -584,7 +723,7 @@ export const PromptComposerInput = forwardRef<PromptComposerInputHandle, PromptC
           ? parts.map((part) =>
               part.type === "text" ? (
                 <span key={part.key}>{part.text}</span>
-              ) : (
+              ) : part.type === "mention" ? (
                 <span
                   key={part.key}
                   className="integration-mention-chip"
@@ -599,6 +738,22 @@ export const PromptComposerInput = forwardRef<PromptComposerInputHandle, PromptC
                   <span className="integration-mention-chip-label">
                     {part.span.mention.label}
                   </span>
+                </span>
+              ) : (
+                <span
+                  key={part.key}
+                  className="composer-link-chip"
+                  contentEditable={false}
+                  data-composer-link-text={part.span.markdown}
+                  title={part.span.url}
+                >
+                  <img
+                    className="composer-link-favicon"
+                    src={getFaviconUrl(part.span.domain)}
+                    alt=""
+                    draggable={false}
+                  />
+                  <span className="composer-link-label">{part.span.label}</span>
                 </span>
               ),
             )

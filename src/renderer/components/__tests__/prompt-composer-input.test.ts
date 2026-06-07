@@ -1,7 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { PromptComposerInput } from "../PromptComposerInput";
+import { PromptComposerInput, formatPastedWebLinkAsMarkdown } from "../PromptComposerInput";
 
 describe("PromptComposerInput", () => {
   it("renders integration mention chips inline from canonical mention text", () => {
@@ -37,5 +37,36 @@ describe("PromptComposerInput", () => {
     expect(markup).toContain("integration-mention-icon-svg");
     expect(markup).toContain("Gmail");
     expect(markup).toContain("for triage");
+  });
+
+  it("formats pasted standalone GitHub URLs as compact Markdown links", () => {
+    expect(formatPastedWebLinkAsMarkdown("https://github.com/nousresearch/hermes-agent")).toBe(
+      "[nousresearch/hermes-agent](https://github.com/nousresearch/hermes-agent)",
+    );
+  });
+
+  it("does not rewrite pasted text containing more than one token", () => {
+    expect(formatPastedWebLinkAsMarkdown("see https://github.com/nousresearch/hermes-agent")).toBeNull();
+  });
+
+  it("renders Markdown web links as inline favicon chips", () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(PromptComposerInput, {
+        value: "[nousresearch/hermes-agent](https://github.com/nousresearch/hermes-agent)",
+        mentions: [],
+        className: "input-field input-textarea",
+        ariaLabel: "Message",
+        onChange: vi.fn(),
+        onKeyDown: vi.fn(),
+        onPaste: vi.fn(),
+        onCursorChange: vi.fn(),
+      }),
+    );
+
+    expect(markup).toContain("composer-link-chip");
+    expect(markup).toContain("composer-link-favicon");
+    expect(markup).toContain("nousresearch/hermes-agent");
+    expect(markup).toContain("github.com");
+    expect(markup).not.toContain("https://github.com/nousresearch/hermes-agent</span>");
   });
 });

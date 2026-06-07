@@ -9512,6 +9512,34 @@
   font-weight: 600;
 }
 
+.composer-link-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(260px, 100%);
+  margin: 0 2px;
+  padding: 1px 7px 1px 4px;
+  border-radius: 8px;
+  color: var(--color-accent, #2563eb);
+  line-height: 1.35;
+  vertical-align: baseline;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.composer-link-favicon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border-radius: 4px;
+}
+
+.composer-link-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .integration-mention-message-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
