@@ -26,6 +26,7 @@ import {
   SkillInstallProgress,
 } from "../../shared/types";
 import { getCapabilityBundleSecurityService } from "../security/capability-bundle-security";
+import { assertNetworkPolicyAllowed } from "../security/network-policy";
 
 // Default registry URL - can be overridden via SKILLHUB_REGISTRY env var.
 // When pointing to a GitHub raw URL with a catalog.json, the static catalog mode is used.
@@ -240,10 +241,7 @@ function parseGitUrl(input: string): { url: string; name: string } | null {
     const urlParts = url.split("/").filter(Boolean);
     name = urlParts[urlParts.length - 1]?.replace(/\.git$/, "") || "skill";
   } else if (url.startsWith("git@")) {
-    const match = url.match(/git@[^:]+:(.+?)(?:\.git)?$/);
-    if (!match) return null;
-    const parts = match[1].split("/");
-    name = parts[parts.length - 1] || "skill";
+    return null;
   } else {
     return null;
   }
@@ -1561,11 +1559,11 @@ export class SkillRegistry {
       return { success: false, error: "URL is required" };
     }
 
-    if (/^https?:\/\/(?:www\.)?clawhub\.ai\//i.test(normalizedUrl)) {
-      return this.installFromClawHub(normalizedUrl);
-    }
-
     try {
+      assertNetworkPolicyAllowed({ url: normalizedUrl, toolName: "skill_url_install" });
+      if (/^https?:\/\/(?:www\.)?clawhub\.ai\//i.test(normalizedUrl)) {
+        return this.installFromClawHub(normalizedUrl);
+      }
       const response = await this.fetchWithTimeout(normalizedUrl);
       if (!response.ok) {
         return { success: false, error: `HTTP ${response.status}: ${response.statusText}` };
@@ -1625,7 +1623,16 @@ export class SkillRegistry {
   ): Promise<SkillInstallResult> {
     const parsed = parseGitUrl(gitUrl);
     if (!parsed) {
-      return { success: false, error: `Invalid git URL: ${gitUrl}` };
+      return { success: false, error: `Invalid or unsupported git URL: ${gitUrl}` };
+    }
+    try {
+      assertNetworkPolicyAllowed({ url: parsed.url, toolName: "skill_git_install" });
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        security: { state: "failed" },
+      };
     }
 
     if (!(await this.isGitAvailable())) {

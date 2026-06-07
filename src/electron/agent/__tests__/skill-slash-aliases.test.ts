@@ -76,6 +76,35 @@ describe("resolveSkillSlashAlias", () => {
     expect(resolveSkillSlashAlias("/commercial-legal-review")).toBe("commercial-legal-review");
   });
 
+  it("resolves flat directory-backed plugin aliases to namespaced skill ids", () => {
+    mocks.getSkill.mockImplementation((id: string) =>
+      id === "codex-security:security-scan" ? { id, enabled: true } : undefined,
+    );
+    mocks.getPluginsByType.mockReturnValue([
+      {
+        state: "registered",
+        manifest: {
+          name: "codex-security",
+          slashCommands: [
+            {
+              name: "security-scan",
+              skillId: "codex-security:security-scan",
+            },
+          ],
+          skillDirectories: [
+            {
+              id: "codex-security:security-scan",
+              path: "skills/security-scan",
+              enabled: true,
+            },
+          ],
+        },
+      },
+    ]);
+
+    expect(resolveSkillSlashAlias("/security-scan")).toBe("codex-security:security-scan");
+  });
+
   it("falls back to a direct skill when a colliding alias target is unavailable", () => {
     mocks.getSkill.mockImplementation((id: string) =>
       id === "fallback" ? { id, enabled: true } : undefined,

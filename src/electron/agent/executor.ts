@@ -21386,7 +21386,9 @@ You are continuing a previous conversation. The context from the previous conver
     error?: string;
   } {
     const trimmed = String(input || "").trim();
-    const match = trimmed.match(/^\/([a-z0-9-]+)(?=\s|$)([\s\S]*)$/i);
+    const match = trimmed.match(
+      /^\/([a-z0-9][a-z0-9-]*(?::[a-z0-9][a-z0-9-]*)?)(?=\s|$)([\s\S]*)$/i,
+    );
     if (!match) {
       return { matched: false };
     }
@@ -21426,7 +21428,9 @@ You are continuing a previous conversation. The context from the previous conver
     error?: string;
   } {
     const text = String(input || "");
-    const match = text.match(/\bthen\s+run\s+\/([a-z0-9-]+)\b([\s\S]*)$/i);
+    const match = text.match(
+      /\bthen\s+run\s+\/([a-z0-9][a-z0-9-]*(?::[a-z0-9][a-z0-9-]*)?)(?=\s|$)([\s\S]*)$/i,
+    );
     if (!match) {
       return { matched: false };
     }

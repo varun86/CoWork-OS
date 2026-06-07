@@ -33,8 +33,12 @@ describe("message shortcuts", () => {
 
   it("validates visible slash command tokens", () => {
     expect(isValidSlashCommandName("geo-quick")).toBe(true);
+    expect(isValidSlashCommandName("codex-security:security-scan")).toBe(true);
     expect(isValidSlashCommandName("GEO Quick")).toBe(false);
     expect(isValidSlashCommandName("-geo")).toBe(false);
+    expect(isValidSlashCommandName("codex-security:")).toBe(false);
+    expect(isValidSlashCommandName("codex-security:bad token")).toBe(false);
+    expect(isValidSlashCommandName("codex-security:security:scan")).toBe(false);
   });
 
   it("looks up commands with or without a slash prefix", () => {

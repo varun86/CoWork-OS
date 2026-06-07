@@ -20,8 +20,13 @@ export function resolveSkillSlashAlias(commandName: string): string | null {
     const skill = loader.getSkill(match.skillId);
     if (!skill || skill.enabled === false) continue;
 
-    const packSkill = (plugin.manifest.skills || []).find((candidate) => candidate.id === match.skillId);
-    if (packSkill?.enabled === false) continue;
+    const packSkill = (plugin.manifest.skills || []).find(
+      (candidate) => candidate.id === match.skillId,
+    );
+    const directorySkill = (plugin.manifest.skillDirectories || []).find(
+      (candidate) => candidate.id === match.skillId,
+    );
+    if (packSkill?.enabled === false || directorySkill?.enabled === false) continue;
     return match.skillId;
   }
 

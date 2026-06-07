@@ -505,6 +505,59 @@ describe("TaskExecutor /simplify and /batch normalization", () => {
     );
   });
 
+  it("resolves flat plugin slash aliases to their namespaced target skill", async () => {
+    const executor = createExecutor(
+      "/security-scan run deep scan",
+      (name, input) => {
+        expect(name).toBe("Skill");
+        expect(input).toEqual({
+          skill: "codex-security:security-scan",
+          args: "run deep scan",
+          trigger: "slash",
+        });
+        return buildSkillToolSuccess({
+          skillId: "codex-security:security-scan",
+          skillName: "Security Scan",
+          trigger: "slash",
+          args: "run deep scan",
+          parameters: {},
+          content: "Security scan prompt expanded",
+          reason: "Applied via /security-scan",
+          appliedAt: Date.now(),
+        });
+      },
+    ) as Any;
+    executor.resolveSkillSlashCommandName = vi.fn((name: string) =>
+      name === "security-scan" ? "codex-security:security-scan" : null,
+    );
+    executor.getSkillForSlashCommand = vi.fn((skillId: string) =>
+      skillId === "codex-security:security-scan"
+        ? {
+            id: "codex-security:security-scan",
+            name: "Security Scan",
+            description: "Run a repository scan",
+            icon: "🛡️",
+            prompt: "Scan {{input}}",
+          }
+        : undefined,
+    );
+
+    const handled = await (TaskExecutor as Any).prototype.maybeHandleSkillSlashCommandOrInlineChain.call(
+      executor,
+    );
+
+    expect(handled).toBe(true);
+    expect(executor.appliedSkills).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          skillId: "codex-security:security-scan",
+          trigger: "slash",
+          content: "Security scan prompt expanded",
+        }),
+      ]),
+    );
+  });
+
   it("rejects `/batch` without an objective", async () => {
     const executor = createExecutor("/batch", (_name, _input) => {
       throw new Error("Skill should not be called");

@@ -102,7 +102,7 @@ const MESSAGE_APP_SHORTCUT_BY_NAME = new Map(
 );
 
 export function isValidSlashCommandName(value: string): boolean {
-  return /^[a-z0-9][a-z0-9-]*$/i.test(String(value || "").trim());
+  return /^[a-z0-9][a-z0-9-]*(?::[a-z0-9][a-z0-9-]*)?$/i.test(String(value || "").trim());
 }
 
 export function normalizeSlashCommandName(value: string): string {

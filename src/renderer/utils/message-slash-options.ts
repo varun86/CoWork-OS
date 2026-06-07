@@ -124,11 +124,16 @@ export function buildMessageSlashOptions(params: {
       }))
     : [];
 
-  const pluginAliasOptions: SlashCommandOption[] = params.pluginSlashCommands
+  const validPluginAliases = params.pluginSlashCommands
     .filter((command) => isValidSlashCommandName(command.name))
     .flatMap((command) => {
       const skill = skillById.get(command.skillId);
       if (!skill) return [];
+      return [{ command, skill }];
+    });
+
+  const pluginAliasOptions: SlashCommandOption[] = validPluginAliases
+    .flatMap(({ command, skill }) => {
       if (!query) return [{ command, skill }];
       const haystack =
         `${command.name} ${command.description || ""} ${skill.name} ${skill.description || ""}`.toLowerCase();
@@ -147,11 +152,18 @@ export function buildMessageSlashOptions(params: {
       skill,
     }));
 
-  const aliasCommandNames = new Set(pluginAliasOptions.map((option) => option.commandName));
+  const aliasCommandNames = new Set(validPluginAliases.map(({ command }) => command.name));
+  const aliasSkillIds = new Set(validPluginAliases.map(({ skill }) => skill.id));
 
   const skillOptions: SlashCommandOption[] = params.customSkills
     .filter((skill) => {
-      if (!isValidSlashCommandName(skill.id) || aliasCommandNames.has(skill.id)) return false;
+      if (
+        !isValidSlashCommandName(skill.id) ||
+        aliasCommandNames.has(skill.id) ||
+        aliasSkillIds.has(skill.id)
+      ) {
+        return false;
+      }
       if (!query) return true;
       return (
         skill.name.toLowerCase().includes(query) ||

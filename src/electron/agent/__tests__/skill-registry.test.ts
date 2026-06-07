@@ -657,6 +657,13 @@ describe("SkillRegistry", () => {
       expect(mockFiles.has(managedPath("git-imported-skill/SKILL.md"))).toBe(true);
     });
 
+    it("rejects SSH-style git URLs before cloning because they cannot be network-policy checked", async () => {
+      const result = await registry.installFromGit("git@github.com:example/skill-repo.git");
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("Invalid or unsupported git URL");
+    });
+
     it("does not fail a git install when temporary clone cleanup hits EPERM once", async () => {
       mockRmSyncThrowOnceFor = ".tmp-skill-repo-";
 

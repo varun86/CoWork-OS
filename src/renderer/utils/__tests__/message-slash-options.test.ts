@@ -59,10 +59,7 @@ describe("buildMessageSlashOptions", () => {
       limit: 20,
     });
 
-    expect(options.map((option) => option.commandName)).toEqual([
-      "smart-files",
-      "batch-rename",
-    ]);
+    expect(options.map((option) => option.commandName)).toEqual(["smart-files"]);
   });
 
   it("shows /review from the built-in shortcut catalog", () => {
@@ -81,6 +78,62 @@ describe("buildMessageSlashOptions", () => {
       kind: "app",
       description: "Review local changes or a pull request in the current workspace.",
     });
+  });
+
+  it("shows flat plugin aliases for bundled plugin skills", () => {
+    const options = buildMessageSlashOptions({
+      query: "security-scan",
+      includeOnboarding: false,
+      customSkills: [
+        skill({
+          id: "codex-security:security-scan",
+          name: "Security Scan",
+          description: "Run repository security scan",
+        }),
+      ],
+      pluginSlashCommands: [
+        {
+          name: "security-scan",
+          description: "Run repository security scan",
+          skillId: "codex-security:security-scan",
+        },
+      ],
+      limit: 20,
+    });
+
+    expect(options.map((option) => option.commandName)).toEqual(["security-scan"]);
+    expect(options[0]).toMatchObject({
+      kind: "skill",
+      commandName: "security-scan",
+      name: "security-scan",
+      skill: expect.objectContaining({ id: "codex-security:security-scan" }),
+    });
+
+    const codexQueryOptions = buildMessageSlashOptions({
+      query: "codex-",
+      includeOnboarding: false,
+      customSkills: [
+        skill({
+          id: "codex-security:security-scan",
+          name: "Security Scan",
+          description: "Run repository security scan",
+        }),
+      ],
+      pluginSlashCommands: [
+        {
+          name: "security-scan",
+          description: "Run repository security scan",
+          skillId: "codex-security:security-scan",
+        },
+      ],
+      limit: 20,
+    });
+
+    expect(
+      codexQueryOptions.some(
+        (option) => option.commandName === "codex-security:security-scan",
+      ),
+    ).toBe(false);
   });
 
   it("hides a direct skill when a plugin alias owns the same visible token", () => {
