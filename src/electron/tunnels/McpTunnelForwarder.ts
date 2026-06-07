@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import type { JSONRPCRequest, JSONRPCResponse } from "../mcp/types";
+import { MCPHostServer } from "../mcp/host/MCPHostServer";
 import { createLogger } from "../utils/logger";
 import {
   enforceTunnelPolicy,
@@ -92,6 +93,7 @@ export class McpTunnelForwarder {
         method: "POST",
         headers: {
           "content-type": "application/json",
+          ...this.getTargetAuthHeaders(),
         },
         body: JSON.stringify(payload),
         signal: controller.signal,
@@ -119,6 +121,17 @@ export class McpTunnelForwarder {
     }
     assertAllowedTargetUrl(this.config.targetUrl);
     return this.config.targetUrl;
+  }
+
+  private getTargetAuthHeaders(): Record<string, string> {
+    if (this.config.targetType !== "cowork-host") {
+      return {};
+    }
+    const token = MCPHostServer.getInstance().getHttpAuthToken();
+    if (!token) {
+      throw new Error("CoWork MCP host auth token is not available");
+    }
+    return { authorization: `Bearer ${token}` };
   }
 
   private buildAuditEvent(input: {
