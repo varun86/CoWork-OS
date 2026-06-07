@@ -14,6 +14,7 @@ import {
   SquareTerminal,
 } from "lucide-react";
 import { getEffectiveTaskEventType } from "../../utils/task-event-compat";
+import { isBrowserToolName } from "../../utils/timeline-tool-labels";
 
 export type ActionBlockIconKind =
   | "explore"
@@ -159,7 +160,11 @@ export function buildActionBlockSummary(
   const webLookups =
     (toolCounts.get("web_fetch") || 0) +
     (toolCounts.get("web_search") || 0) +
-    (toolCounts.get("http_request") || 0);
+    (toolCounts.get("http_request") || 0) +
+    Array.from(toolCounts.entries()).reduce(
+      (sum, [tool, count]) => sum + (isBrowserToolName(tool) ? count : 0),
+      0,
+    );
   let verificationSteps = 0;
   let generativeSteps = 0;
   for (const event of events) {

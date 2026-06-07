@@ -17,6 +17,7 @@ import {
 } from "./task-outputs";
 import { hasAssistantMediaDirective } from "./assistant-media-directives";
 import {
+  filterAdjacentDuplicateTimelineFailures,
   filterVerboseTimelineNoise,
   isLlmRequestCancelledEvent,
   shouldShowTaskEventInSummaryMode,
@@ -790,7 +791,7 @@ export function deriveSharedTaskEventUiState(
   const normalizedEvents = normalizeEventsForTimelineUi(rawEvents);
   const candidateEvents = params.verboseSteps
     ? filterVerboseTimelineNoise(normalizedEvents)
-    : normalizedEvents;
+    : filterAdjacentDuplicateTimelineFailures(normalizedEvents);
 
   const liveEvents: TaskEvent[] = [];
   const inspectOnlyEvents: TaskEvent[] = [];
@@ -825,10 +826,11 @@ export function deriveSharedTaskEventUiState(
     }
   }
 
+  const dedupedLiveEvents = filterAdjacentDuplicateTimelineFailures(liveEvents);
   const parallelGroupProjection = buildParallelGroupProjection(normalizedEvents);
   const suppressedParallelEventIds = parallelGroupProjection.suppressedEventIds;
-  const toolCallPairing = deriveToolCallPairing(liveEvents, suppressedParallelEventIds);
-  const baseTimelineItems = deriveBaseTimelineItems(liveEvents);
+  const toolCallPairing = deriveToolCallPairing(dedupedLiveEvents, suppressedParallelEventIds);
+  const baseTimelineItems = deriveBaseTimelineItems(dedupedLiveEvents);
   const commandOutputSessions = deriveCommandOutputSessions(normalizedEvents);
   const planSteps = derivePlanSteps(normalizedEvents);
   const checklistState = deriveChecklistState(normalizedEvents);
@@ -837,14 +839,14 @@ export function deriveSharedTaskEventUiState(
   const toolUsage = deriveToolUsage(normalizedEvents);
   const referencedFiles = deriveReferencedFiles(normalizedEvents);
   const usedToolNames = deriveUsedToolNames(normalizedEvents);
-  const latestVisibleTaskEvent = getLatestVisibleTaskEvent(baseTimelineItems, liveEvents);
+  const latestVisibleTaskEvent = getLatestVisibleTaskEvent(baseTimelineItems, dedupedLiveEvents);
 
   return {
     projectionMode,
     rawEventCount: params.rawEvents.length,
     normalizedEvents,
-    filteredEvents: liveEvents,
-    liveEvents,
+    filteredEvents: dedupedLiveEvents,
+    liveEvents: dedupedLiveEvents,
     inspectOnlyEvents,
     debugOnlyEvents,
     parallelGroupProjection,

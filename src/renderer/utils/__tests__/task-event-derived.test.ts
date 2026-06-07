@@ -11,6 +11,7 @@ function makeEvent(
   timestamp: number,
   type: string,
   payload: Record<string, unknown> = {},
+  overrides: Record<string, unknown> = {},
 ): Any {
   return {
     id,
@@ -18,6 +19,7 @@ function makeEvent(
     timestamp,
     type,
     payload,
+    ...overrides,
   };
 }
 
@@ -143,6 +145,37 @@ describe("deriveSharedTaskEventUiState action blocks", () => {
       "error-1",
       "error-3",
     ]);
+  });
+
+  it("deduplicates matching visible failed-step and timeline error events", () => {
+    const reason =
+      "Step contract failure [contract_unmet_write_required][artifact_write_checkpoint_failed]: iteration 5 reached without successful file/canvas mutation.";
+    const shared = deriveSharedTaskEventUiState({
+      rawEvents: [
+        makeEvent(
+          "step-failed",
+          1_000,
+          "timeline_step_finished",
+          {
+            legacyType: "step_failed",
+            message: reason,
+            reason,
+            step: { id: "step-1", description: "Applying fixes", error: reason },
+          },
+          { status: "failed", stepId: "step-1" },
+        ),
+        makeEvent("hidden-progress", 1_001, "timeline_step_updated", {
+          legacyType: "progress_update",
+          message: "Internal progress",
+        }),
+        makeEvent("matching-error", 1_002, "timeline_error", { message: reason }),
+      ],
+      task: { id: "task-1", status: "failed" } as Any,
+      workspace: null,
+      verboseSteps: false,
+    });
+
+    expect(shared.filteredEvents.map((event) => event.id)).toEqual(["step-failed"]);
   });
 
   it("limits command output sessions when more sessions are running than the UI budget", () => {

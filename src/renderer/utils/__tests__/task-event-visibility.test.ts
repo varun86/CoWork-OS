@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { TaskEvent } from "../../../shared/types";
 import {
   ALWAYS_VISIBLE_TECHNICAL_EVENT_TYPES,
+  filterAdjacentDuplicateTimelineFailures,
   filterVerboseTimelineNoise,
   IMPORTANT_EVENT_TYPES,
   isImportantTaskEvent,
@@ -51,6 +52,26 @@ describe("task event visibility helpers", () => {
         makeEvent("timeline_step_updated", { legacyType: "tool_result", tool: "run_command" }),
       ),
     ).toBe(false);
+  });
+
+  it("hides implementation-only browser action audit events from the step feed", () => {
+    const browserAction = makeEvent(
+      "log",
+      { action: "snapshot", url: "http://localhost:5173" },
+      { type: "browser_action" as TaskEvent["type"] },
+    );
+
+    expect(isImportantTaskEvent(browserAction)).toBe(false);
+    expect(shouldShowTaskEventInStepFeed(browserAction, { verboseSteps: true })).toBe(false);
+  });
+
+  it("keeps canonical browser tool calls visible in the verbose step feed", () => {
+    const browserToolCall = makeEvent("tool_call", {
+      tool: "browser_snapshot",
+      input: { session_id: "default" },
+    });
+
+    expect(shouldShowTaskEventInStepFeed(browserToolCall, { verboseSteps: true })).toBe(true);
   });
 
   it("keeps timeline assistant messages visible in summary mode", () => {
@@ -455,6 +476,72 @@ describe("task event visibility helpers", () => {
       ),
     ]);
     expect(filtered.map((e) => e.id)).toEqual(["a", "c", "e"]);
+  });
+
+  it("deduplicates adjacent timeline_error events that repeat a failed step reason", () => {
+    const reason =
+      "Step contract failure [contract_unmet_write_required][artifact_write_checkpoint_failed]: iteration 5 reached without successful file/canvas mutation.";
+    const filtered = filterAdjacentDuplicateTimelineFailures([
+      makeEvent(
+        "timeline_step_finished",
+        {
+          legacyType: "step_failed",
+          message: reason,
+          reason,
+          step: { id: "step-1", description: "Applying fixes", error: reason },
+        },
+        { id: "step-failed", timestamp: 1000, status: "failed", stepId: "step-1" },
+      ),
+      makeEvent(
+        "timeline_error",
+        { message: reason.replace(/\.$/, "") },
+        { id: "matching-error", timestamp: 1001 },
+      ),
+    ]);
+
+    expect(filtered.map((event) => event.id)).toEqual(["step-failed"]);
+  });
+
+  it("keeps the failed step when an adjacent duplicate timeline_error arrives first", () => {
+    const reason =
+      "Step contract failure [contract_unmet_write_required][artifact_write_checkpoint_failed]: iteration 5 reached without successful file/canvas mutation.";
+    const filtered = filterAdjacentDuplicateTimelineFailures([
+      makeEvent("timeline_error", { message: reason }, { id: "matching-error", timestamp: 1000 }),
+      makeEvent(
+        "timeline_step_finished",
+        {
+          legacyType: "step_failed",
+          message: reason,
+          reason,
+          step: { id: "step-1", description: "Applying fixes", error: reason },
+        },
+        { id: "step-failed", timestamp: 1001, status: "failed", stepId: "step-1" },
+      ),
+    ]);
+
+    expect(filtered.map((event) => event.id)).toEqual(["step-failed"]);
+  });
+
+  it("keeps adjacent timeline_error events with different failure text", () => {
+    const filtered = filterAdjacentDuplicateTimelineFailures([
+      makeEvent(
+        "timeline_step_finished",
+        {
+          legacyType: "step_failed",
+          message: "Step contract failure: missing artifact write",
+          reason: "Step contract failure: missing artifact write",
+          step: { id: "step-1", description: "Applying fixes" },
+        },
+        { id: "step-failed", timestamp: 1000, status: "failed", stepId: "step-1" },
+      ),
+      makeEvent(
+        "timeline_error",
+        { message: "Completion blocked: unresolved failed step(s): step-1" },
+        { id: "completion-error", timestamp: 1001 },
+      ),
+    ]);
+
+    expect(filtered.map((event) => event.id)).toEqual(["step-failed", "completion-error"]);
   });
 
   it("keeps stage-boundary group starts in verbose mode along with custom groups", () => {

@@ -17,6 +17,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { getEffectiveTaskEventType } from "../../utils/task-event-compat";
+import { isSkillToolName } from "../../utils/timeline-tool-labels";
 
 export type TimelineIndicatorTone = "neutral" | "active" | "success" | "warning" | "error";
 
@@ -42,6 +43,33 @@ function resolveGroupLabel(payload: unknown): string {
   const obj = asObject(payload);
   const raw = typeof obj.groupLabel === "string" ? obj.groupLabel.trim() : "";
   return raw;
+}
+
+function isSkillReadToolEvent(event: TaskEvent): boolean {
+  const effectiveType = getEffectiveTaskEventType(event);
+  if (effectiveType !== "tool_call" && effectiveType !== "tool_result") return false;
+
+  const payload = asObject(event.payload);
+  const tool = typeof payload.tool === "string" ? payload.tool.trim() : "";
+  if (isSkillToolName(tool)) return true;
+
+  if (tool !== "read_file" && tool !== "read_files") return false;
+  const input = asObject(payload.input);
+  const result = asObject(payload.result);
+  const path =
+    (typeof input.path === "string" && input.path.trim()) ||
+    (typeof result.path === "string" && result.path.trim()) ||
+    "";
+  if (/\/?SKILL\.md$/i.test(path)) return true;
+
+  if (Array.isArray(result.files)) {
+    return result.files.some((entry) => {
+      const obj = asObject(entry);
+      return typeof obj.path === "string" && /\/?SKILL\.md$/i.test(obj.path.trim());
+    });
+  }
+
+  return false;
 }
 
 export function resolveTimelineGroupId(event: TaskEvent): string | null {
@@ -134,6 +162,15 @@ export function resolveTimelineIndicator(
 
   if (effectiveType === "retry_started") {
     return { icon: RotateCcw, tone: "active", label: "Retry started" };
+  }
+
+  if (isSkillReadToolEvent(event)) {
+    const completed = effectiveType === "tool_result" || isTaskCompleted;
+    return {
+      icon: Package,
+      tone: completed ? "success" : "active",
+      label: completed ? "Skill read" : "Reading skill",
+    };
   }
 
   if (

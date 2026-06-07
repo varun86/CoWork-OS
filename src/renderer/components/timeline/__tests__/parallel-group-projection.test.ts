@@ -225,6 +225,38 @@ describe("parallel-group-projection", () => {
     expect(group?.lanes[0]?.title).toBe("Read files: SessionRuntime.ts, ToolScheduler.ts");
   });
 
+  it("shows skill names for grouped SKILL.md reads", () => {
+    const groupId = "tools:step:build:1";
+    const events: TaskEvent[] = [
+      makeEvent("timeline_group_started", "evt-1", {
+        groupId,
+        groupLabel: "Tool batch (1)",
+      }),
+      makeEvent("tool_call", "evt-2", {
+        groupId,
+        tool: "read_file",
+        toolUseId: "use-1",
+        toolCallIndex: 1,
+        input: { path: "/Users/test/.codex/skills/test/SKILL.md" },
+      }),
+      makeEvent("tool_result", "evt-3", {
+        groupId,
+        tool: "read_file",
+        toolUseId: "use-1",
+        toolCallIndex: 1,
+        result: {
+          success: true,
+          path: "/Users/test/.codex/skills/test/SKILL.md",
+          content: "# Test",
+        },
+      }),
+    ];
+
+    const projection = buildParallelGroupProjection(events);
+    const group = projection.groupsByAnchorEventId.get("evt-1");
+    expect(group?.lanes[0]?.title).toBe("Read Test skill");
+  });
+
   it("uses embedded timeline tool payloads for lane titles", () => {
     const groupId = "tools:step:build:1";
     const events: TaskEvent[] = [

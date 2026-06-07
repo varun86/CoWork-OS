@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, Circle, Loader2 } from "lucide-react";
 import type { TimelineEventStatus } from "../../../shared/types";
+import { isBrowserToolName } from "../../utils/timeline-tool-labels";
 import { StepFeed } from "./StepFeed";
 import type { TimelineIndicatorSpec } from "./timeline-indicators";
 import type { ParallelGroupProjection } from "./parallel-group-projection";
@@ -65,6 +66,10 @@ function hasActiveImageGenerationLane(group: ParallelGroupProjection): boolean {
   return group.lanes.some(isActiveImageGenerationLane);
 }
 
+function isBrowserToolGroup(group: ParallelGroupProjection): boolean {
+  return group.lanes.length > 0 && group.lanes.every((lane) => isBrowserToolName(lane.toolName));
+}
+
 function ImageGenerationFramePreview() {
   return (
     <div
@@ -81,6 +86,10 @@ function ImageGenerationFramePreview() {
 
 function buildParallelGroupTitle(group: ParallelGroupProjection, isActive: boolean): string {
   const count = group.lanes.length;
+  if (isBrowserToolGroup(group)) {
+    return isActive ? "Using the browser" : "Used the browser";
+  }
+
   const singleLaneTitle =
     count === 1 && typeof group.lanes[0]?.title === "string" ? group.lanes[0].title.trim() : "";
   if (singleLaneTitle) {
@@ -135,10 +144,11 @@ export function ParallelGroupFeed({
   }
 
   const singleLane = group.lanes.length === 1 ? group.lanes[0] : null;
+  const isBrowserGroup = isBrowserToolGroup(group);
   const isActive =
     isActiveStatus(group.status) || group.lanes.some((lane) => isActiveStatus(lane.status));
   const showImageGenerationFrame = hasActiveImageGenerationLane(group);
-  const hasExpandableDetails = group.lanes.length > 1;
+  const hasExpandableDetails = group.lanes.length > 1 || isBrowserGroup;
   const [expanded, setExpanded] = useState(hasExpandableDetails && (isActive || defaultExpanded));
 
   useEffect(() => {
@@ -154,7 +164,7 @@ export function ParallelGroupFeed({
   const indicator = useMemo(() => buildIndicatorForStatus(group.status), [group.status]);
   const groupTitle = useMemo(() => buildParallelGroupTitle(group, isActive), [group, isActive]);
 
-  if (singleLane) {
+  if (singleLane && !isBrowserGroup) {
     return (
       <div className="timeline-event parallel-group-feed-single">
         <div className="parallel-group-feed-lane parallel-group-feed-single-lane">

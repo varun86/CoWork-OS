@@ -84,6 +84,16 @@ describe("buildActionBlockSummary", () => {
     expect(summary.summary).toBe("1 step");
   });
 
+  it("counts browser tools as web activity", () => {
+    const summary = buildActionBlockSummary([
+      toolEvent("browser-1", "browser_navigate", 1000),
+      toolEvent("browser-2", "browser_screenshot", 1100),
+    ]);
+
+    expect(summary.iconKind).toBe("web");
+    expect(summary.summary).toBe("2 web lookups");
+  });
+
   it("renders generation blocks with a sparkles glyph instead of the generic work circle", () => {
     const html = renderToStaticMarkup(
       createElement(

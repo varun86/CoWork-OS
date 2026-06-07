@@ -5,6 +5,7 @@ import {
   Circle,
   FileOutput,
   Loader2,
+  Package,
   RotateCcw,
   Search,
   Shield,
@@ -110,6 +111,26 @@ describe("timeline indicators", () => {
     const indicator = resolveTimelineIndicator(makeEvent("retry_started", { attempt: 2 }));
     expect(indicator.icon).toBe(RotateCcw);
     expect(indicator.tone).toBe("active");
+  });
+
+  it("maps skill reads to Package icon", () => {
+    const reading = resolveTimelineIndicator(
+      makeEvent("tool_call", {
+        tool: "read_file",
+        input: { path: "/Users/test/.codex/skills/test/SKILL.md" },
+      }),
+    );
+    expect(reading.icon).toBe(Package);
+    expect(reading.tone).toBe("active");
+
+    const read = resolveTimelineIndicator(
+      makeEvent("tool_result", {
+        tool: "skill",
+        result: { skill_name: "Test" },
+      }),
+    );
+    expect(read.icon).toBe(Package);
+    expect(read.tone).toBe("success");
   });
 
   it("falls back to Circle neutral icon for unknown event types", () => {

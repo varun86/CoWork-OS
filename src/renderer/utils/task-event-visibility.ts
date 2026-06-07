@@ -199,8 +199,13 @@ function isToolBatchLaneEvent(event: TaskEvent): boolean {
   );
 }
 
+function isImplementationOnlyBrowserActionEvent(event: TaskEvent): boolean {
+  return String(event.type) === "browser_action";
+}
+
 // In non-verbose mode, hide most tool traffic but keep user-facing schedule confirmations visible.
 export function isImportantTaskEvent(event: TaskEvent): boolean {
+  if (isImplementationOnlyBrowserActionEvent(event)) return false;
   const effectiveType = getEffectiveTaskEventType(event);
   if (IMPORTANT_EVENT_TYPES.includes(effectiveType as EventType)) return true;
   if (effectiveType !== "tool_result") return false;
@@ -216,6 +221,69 @@ function getEventMessage(event: TaskEvent): string {
 }
 
 const VERBOSE_DUPLICATE_WINDOW_MS = 15_000;
+
+function normalizeFailureTextForDedupe(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").replace(/[.。]+$/g, "").trim();
+}
+
+function getComparableFailureText(event: TaskEvent): string {
+  if (event.type === "timeline_error") {
+    return normalizeFailureTextForDedupe(getTimelineErrorText(event));
+  }
+
+  const effectiveType = getEffectiveTaskEventType(event);
+  if (effectiveType !== "step_failed") return "";
+
+  const payload = asObject(event.payload);
+  const step = asObject(payload.step);
+  const raw =
+    getPayloadText(payload, "reason") ||
+    getPayloadText(step, "error") ||
+    getPayloadText(payload, "error") ||
+    getPayloadText(payload, "message") ||
+    getPayloadText(step, "description");
+  return normalizeFailureTextForDedupe(raw);
+}
+
+function isTimelineErrorStepFailureDuplicate(current: TaskEvent, previous: TaskEvent): boolean {
+  const currentIsTimelineError = current.type === "timeline_error";
+  const previousIsTimelineError = previous.type === "timeline_error";
+  if (currentIsTimelineError === previousIsTimelineError) return false;
+  if (current.taskId !== previous.taskId) return false;
+
+  const currentEffectiveType = getEffectiveTaskEventType(current);
+  const previousEffectiveType = getEffectiveTaskEventType(previous);
+  const hasFailedStep =
+    currentEffectiveType === "step_failed" || previousEffectiveType === "step_failed";
+  if (!hasFailedStep) return false;
+
+  if (Math.abs((current.timestamp ?? 0) - (previous.timestamp ?? 0)) > VERBOSE_DUPLICATE_WINDOW_MS) {
+    return false;
+  }
+
+  const currentFailureText = getComparableFailureText(current);
+  const previousFailureText = getComparableFailureText(previous);
+  return Boolean(currentFailureText && currentFailureText === previousFailureText);
+}
+
+export function filterAdjacentDuplicateTimelineFailures(events: TaskEvent[]): TaskEvent[] {
+  const out: TaskEvent[] = [];
+  for (const event of events) {
+    const previousVisibleEvent = out[out.length - 1];
+    if (
+      previousVisibleEvent &&
+      isTimelineErrorStepFailureDuplicate(event, previousVisibleEvent)
+    ) {
+      if (event.type === "timeline_error") {
+        continue;
+      }
+      out[out.length - 1] = event;
+      continue;
+    }
+    out.push(event);
+  }
+  return out;
+}
 
 function getToolCorrelationId(payload: Record<string, unknown>): string {
   const toolUseId =
@@ -439,7 +507,7 @@ export function filterVerboseTimelineNoise(events: TaskEvent[]): TaskEvent[] {
       taskIdsAfterBlockingFailure.add(event.taskId);
     }
   }
-  return out;
+  return filterAdjacentDuplicateTimelineFailures(out);
 }
 
 export function shouldShowTaskEventInSummaryMode(
@@ -464,6 +532,7 @@ export function shouldShowTaskEventInStepFeed(
   event: TaskEvent,
   options?: { verboseSteps?: boolean },
 ): boolean {
+  if (isImplementationOnlyBrowserActionEvent(event)) return false;
   if (isToolBatchTimelineGroupEvent(event)) return false;
   if (isToolBatchLaneEvent(event)) return false;
 

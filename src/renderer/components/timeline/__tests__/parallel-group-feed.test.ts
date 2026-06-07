@@ -250,4 +250,73 @@ describe("ParallelGroupFeed", () => {
     expect(markup).not.toContain('class="parallel-group-feed-details"');
     expect(markup).not.toContain("Exit Status Is 0");
   });
+
+  it("renders browser tool batches as a browser step with lane details", () => {
+    const markup = render(
+      React.createElement(ParallelGroupFeed, {
+        group: makeGroup({
+          label: "Research Sources",
+          status: "completed",
+          lanes: [
+            {
+              laneKey: "use-1",
+              toolUseId: "use-1",
+              toolName: "browser_navigate",
+              toolCallIndex: 1,
+              title: "Opened browser: localhost:5173",
+              status: "completed",
+              startedAt: 1001,
+            },
+            {
+              laneKey: "use-2",
+              toolUseId: "use-2",
+              toolName: "browser_screenshot",
+              toolCallIndex: 2,
+              title: "Captured screenshot",
+              status: "completed",
+              startedAt: 1002,
+            },
+          ],
+        }),
+        timeLabel: "12:03",
+        formatTime: () => "12:03",
+        defaultExpanded: true,
+      }),
+    );
+
+    expect(markup).toContain("Used the browser");
+    expect(markup).toContain("Opened browser: localhost:5173");
+    expect(markup).toContain("Captured screenshot");
+    expect(markup).not.toContain("Research Sources");
+  });
+
+  it("renders a single browser lane as an expandable browser step", () => {
+    const markup = render(
+      React.createElement(ParallelGroupFeed, {
+        group: makeGroup({
+          label: "Tool batch (1)",
+          status: "completed",
+          lanes: [
+            {
+              laneKey: "use-1",
+              toolUseId: "use-1",
+              toolName: "browser_snapshot",
+              toolCallIndex: 1,
+              title: "Inspected page",
+              status: "completed",
+              startedAt: 1001,
+            },
+          ],
+        }),
+        timeLabel: "12:03",
+        formatTime: () => "12:03",
+        defaultExpanded: true,
+      }),
+    );
+
+    expect(markup).toContain("Used the browser");
+    expect(markup).toContain("Inspected page");
+    expect(markup).toContain("event-expand-icon");
+    expect(markup).not.toContain("parallel-group-feed-single");
+  });
 });
