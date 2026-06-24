@@ -1,6 +1,6 @@
 # Public Adoption Stats
 
-Generated at: 2026-06-23T07:00:29.537Z
+Generated at: 2026-06-24T06:57:53.606Z
 
 These numbers are acquisition and download-intent signals for CoWork OS. They do **not** measure active users, first launch, successful task completion, model configuration, retention, prompts, files, emails, or any in-app content.
 
@@ -14,12 +14,12 @@ These numbers are acquisition and download-intent signals for CoWork OS. They do
 | GitHub open issues | 10 |
 | Latest release | v0.5.49 |
 | Latest release date | 2026-06-08 |
-| Installer/server downloads, lifetime | 1,100 |
-| Installer/server downloads, since previous snapshot | 1 |
+| Installer/server downloads, lifetime | 1,103 |
+| Installer/server downloads, since previous snapshot | 3 |
 | npm latest version | 0.5.49 |
-| npm downloads, last day | 5 |
-| npm downloads, last week | 108 |
-| npm downloads, last month | 1,142 |
+| npm downloads, last day | 7 |
+| npm downloads, last week | 107 |
+| npm downloads, last month | 1,139 |
 | GitHub views, last 14-ish days | unavailable |
 | GitHub clones, last 14-ish days | unavailable |
 
@@ -27,18 +27,18 @@ These numbers are acquisition and download-intent signals for CoWork OS. They do
 
 | Platform | Lifetime downloads | Delta |
 |---|---:|---:|
-| macos | 641 | +0 |
+| macos | 642 | +1 |
 | server | 30 | +0 |
-| windows | 429 | +1 |
+| windows | 431 | +2 |
 
 ## Recent Release Assets
 
 | Release | Asset | Platform | Downloads | Delta |
 |---|---|---|---:|---:|
 | v0.5.49 | CoWork-OS-0.5.49-arm64-mac.zip | macos | 13 | +0 |
-| v0.5.49 | CoWork-OS-0.5.49-arm64.dmg | macos | 20 | +0 |
+| v0.5.49 | CoWork-OS-0.5.49-arm64.dmg | macos | 21 | +1 |
 | v0.5.49 | cowork-os-server-linux-x64-v0.5.49.tar.gz | server | 4 | +0 |
-| v0.5.49 | CoWork-OS-Setup-0.5.49.exe | windows | 61 | +1 |
+| v0.5.49 | CoWork-OS-Setup-0.5.49.exe | windows | 63 | +2 |
 | v0.5.48 | CoWork-OS-0.5.48-arm64-mac.zip | macos | 5 | +0 |
 | v0.5.48 | CoWork-OS-0.5.48-arm64.dmg | macos | 26 | +0 |
 | v0.5.48 | cowork-os-server-linux-x64-v0.5.48.tar.gz | server | 4 | +0 |
